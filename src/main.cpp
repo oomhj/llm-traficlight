@@ -46,9 +46,9 @@
 #define ROW1_Y         85          // CPU 行 Y
 #define ROW2_Y         95          // MEM 行 Y
 #define ROW_LABEL_X    2           // "CPU"/"MEM" 标题 X
-#define ROW_BAR_X      16          // 条形图起始 X
+#define ROW_BAR_X      21          // 条形图起始 X
 #define ROW_BAR_W      3           // 每格宽度
-#define ROW_BAR_H      6           // 每格高度
+#define ROW_BAR_H      7           // 每格高度
 #define ROW_BAR_GAP    1           // 格间距
 #define ROW_VALUE_X    102         // 百分比数值 X
 #define BAR_COUNT      20          // 格子数 (每格 5%)
@@ -142,15 +142,16 @@ void drawTrafficLight(const String& color) {
     else if (color == "green")  drawLightOn(TL_GREEN_X, TL_CY, TL_R, COL_GREEN, COL_G_GLOW);
 }
 
-/** 绘制 10 格条形图 */
+/** 绘制 20 格条形图 (每格 5%) */
 void drawBars(int y, int value, uint16_t fillColor) {
+    int perBar = 100 / BAR_COUNT;  // 每格代表 5%
     for (int i = 0; i < BAR_COUNT; i++) {
         int bx = ROW_BAR_X + i * (ROW_BAR_W + ROW_BAR_GAP);
-        int threshold = (i + 1) * 10;
-        if (value >= threshold) {
+        int filled = (i + 1) * perBar;
+        if (value >= filled) {
             tft.fillRect(bx, y, ROW_BAR_W, ROW_BAR_H, fillColor);
-        } else if (value > i * 10) {
-            int partial = (value % 10) * ROW_BAR_W / 10;
+        } else if (value > i * perBar) {
+            int partial = (value % perBar) * ROW_BAR_W / perBar;
             if (partial > 0) tft.fillRect(bx, y, partial, ROW_BAR_H, fillColor);
             tft.drawRect(bx, y, ROW_BAR_W, ROW_BAR_H, fillColor);
         } else {
@@ -159,7 +160,7 @@ void drawBars(int y, int value, uint16_t fillColor) {
     }
 }
 
-/** 更新健康面板 — 一行一条: 标题 | 10格条 | 百分比 */
+/** 更新健康面板 — 一行一条: 标题 | 20格条 | 百分比 */
 void drawHealthPanel(int cpu, int mem) {
     tft.setTextSize(1);
 
