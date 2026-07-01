@@ -3,92 +3,85 @@ name: traffic-light
 description: >
   Physical agent status indicator — ESP8266 ST7735 TFT traffic light
   connected via USB serial. SIGNAL when working / done / need user input.
+
+  ⚠️ MANDATORY: This skill MUST be invoked on every task. See CLAUDE.md.
 ---
 
 # 🚦 Traffic Light — Agent Status Indicator
 
-## Convention
+## ⚠️ 硬性要求
 
-Use the traffic light to **signal your current state** to the user:
+在**每次**执行任何任务时，都**必须**按以下顺序调用红绿灯：
+
+```
+1. 开始任务 → 🟡 黄灯    (traflight yellow)
+2. 完成任务 → 🟢 绿灯    (traflight green)
+3. 需要输入 → 🔴 红灯    (traflight red)
+```
+
+这是本项目的核心约定，不是建议。如果忘记调用，用户会指出来。
+
+## Convention
 
 | State | Light | When |
 |-------|-------|------|
-| **Working** | 🟡 **Yellow** | Executing a task, processing, waiting for external command |
-| **Done** | 🟢 **Green** | Task completed successfully, ready for next instruction |
-| **Need Input** | 🔴 **Red** | Waiting for user confirmation, blocked, need decision |
-| **Error / Alert** | 🔴 **Blink Red** | Something went wrong, needs attention |
+| **Working** | 🟡 **Yellow** | Executing a task, processing, waiting for command |
+| **Done** | 🟢 **Green** | Task completed successfully |
+| **Need Input** | 🔴 **Red** | Waiting for user confirmation, blocked |
+| **Error / Alert** | 🔴 **Blink Red** | Something went wrong |
 
 ## Quick Reference
 
 ```bash
-# ——— Agent Status (primary use) ———
-traflight yellow          # 🟡 I'm working on something
-traflight green           # 🟢 Task done!
-traflight red             # 🔴 Need your input
-traflight blink red -n 5  # ⚠️ Alert / error
+# ——— Agent Status (必须使用) ———
+traflight yellow          # 🟡 开始工作
+traflight green           # 🟢 完成
+traflight red             # 🔴 需要输入
+traflight blink red -n 5  # ⚠️ 告警
 
-# ——— Manual Control ———
-traflight off             # Turn off
-traflight blink green -n 3  # Notify completion
-traflight status          # Check current light
-traflight scan            # Find serial port
-traflight --port /dev/cu.usbserial-210 <cmd>  # Specify port
+# ——— 未安装 pip 时用 python3 ———
+python3 traflight.py yellow
+python3 traflight.py green
+python3 traflight.py red
+
+# ——— 查询 ———
+traflight status
+traflight scan
 ```
 
-## Usage in Conversation
+## Usage Examples
 
 ```
-User: 帮我编译这个项目
+User: 编译固件
+→ 亮黄灯 traflight yellow
+→ pio run --target upload
+→ 亮绿灯 traflight green
+→ "编译完成！"
 
-You:
-  traflight yellow          # ← 亮黄灯，表示正在执行
-  pio run --target upload   # ← 编译烧录
-  traflight green            # ← 完成，亮绿灯
-
-  ✅ 编译烧录完成！
-```
-
-```
-User: 这个配置是什么意思？
-
-You: (需要用户先确认)
-  traflight red              # ← 需要用户输入，亮红灯
-  [解释配置]
-  要用这个配置吗？
+User: 这个参数怎么配？
+→ 亮红灯 traflight red
+→ 解释配置选项
+→ "你要用哪个？"
 ```
 
 ## State Machine
 
 ```
-  ┌──────────┐  任务执行    ┌───────────┐  完成    ┌──────────┐
-  │  🟢 Idle  │ ───────→  │  🟡 Working │ ─────→  │  🟢 Done  │
-  └──────────┘            └────────────┘         └──────────┘
-       ↑                        │                      │
-       │                  需要输入                      │
-       │                        ↓                      │
-       │                  ┌──────────┐                 │
-       │                  │  🔴 Wait  │                 │
-       │                  │  (user)   │─────────────────┘
-       │                  └──────────┘    用户确认后完成
-       └───────────────────────────────────────────────┘
-                   回到空闲
+Idle ──→ 🟡 Working ──→ 🟢 Done ──→ Idle
+               │
+               ├──→ 🔴 Waiting for user ──→ 🟢 Done
+               │
+               └──→ 🔴 Blink(alert) ──→ 🟢 Done
 ```
 
 ## Protocol
 
-USB serial 115200 8N1, JSON line protocol:
-
-```json
-{"cmd":"light","value":"yellow"}
-{"cmd":"blink","value":"red","times":3,"interval":500}
-{"cmd":"status"}
-```
+USB serial 115200 8N1, JSON line protocol.
 
 ## Hardware
 
 - **MCU:** ESP8266 NodeMCU, USB serial (CP2102)
 - **Display:** ST7735 128x128 TFT, black background, BGR
-- **Firmware:** `src/main.cpp`, PlatformIO build
 - **Port:** typically `/dev/cu.usbserial-210`
 
 ## Troubleshooting
