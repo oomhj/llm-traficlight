@@ -86,6 +86,7 @@ bool patternActive = false;
 JsonDocument patternSteps;
 size_t patternIndex = 0;
 unsigned long patternStepStartTime = 0;
+unsigned long patternDrift = 0;      // 上一步绘制耗时补偿
 
 // ======================== TFT 绘图函数 ========================
 
@@ -128,16 +129,56 @@ void drawTrafficLight(const String& color) {
     }
 }
 
-// ======================== 灯光控制 ========================
-void setLight(const String& color) {
-    if (blinkingActive || patternActive) return;
-    currentLight = color;
-    drawTrafficLight(color);
+// ======================== 灯光控制 (增量绘制) ========================
+// 不重绘整个屏幕，只切换变动的灯，每次 ~5ms 而非 ~100ms
+
+/** 根据灯色返回 Y 坐标 */
+int lightCy(const String& color) {
+    if (color == "red")    return LIGHT_R1_Y;
+    if (color == "yellow") return LIGHT_R2_Y;
+    if (color == "green")  return LIGHT_R3_Y;
+    return -1;
 }
 
+/** 运行时切换灯光 — 只绘制变动的灯，外壳和其他灯不变 */
+void setLight(const String& color) {
+    if (blinkingActive || patternActive) return;
+    if (currentLight == color) return;
+
+    int prevCy = lightCy(currentLight);
+    int newCy  = lightCy(color);
+
+    // 熄灭前一个灯 (清除辉光 + 画暗灯)
+    if (prevCy > 0) {
+        tft.fillCircle(LIGHT_CX, prevCy, LIGHT_R + 3, COL_BODY);
+        drawLightOff(LIGHT_CX, prevCy, LIGHT_R);
+    }
+
+    // 点亮新灯
+    if (color == "red")
+        drawLightOn(LIGHT_CX, LIGHT_R1_Y, LIGHT_R, COL_RED, COL_RED_GLOW);
+    else if (color == "yellow")
+        drawLightOn(LIGHT_CX, LIGHT_R2_Y, LIGHT_R, COL_YELLOW, COL_Y_GLOW);
+    else if (color == "green")
+        drawLightOn(LIGHT_CX, LIGHT_R3_Y, LIGHT_R, COL_GREEN, COL_G_GLOW);
+    // "off": 不需要点亮
+
+    currentLight = color;
+}
+
+/** 闪烁切换 — 只控制指定灯，不清除其他灯 */
 void setBlinkLight(const String& color, bool on) {
-    if (on) drawTrafficLight(color);
-    else drawTrafficLight("off");
+    int cy = lightCy(color);
+    if (cy < 0) return;
+
+    if (on) {
+        drawLightOn(LIGHT_CX, cy, LIGHT_R,
+            color == "red" ? COL_RED : (color == "yellow" ? COL_YELLOW : COL_GREEN),
+            color == "red" ? COL_RED_GLOW : (color == "yellow" ? COL_Y_GLOW : COL_G_GLOW));
+    } else {
+        tft.fillCircle(LIGHT_CX, cy, LIGHT_R + 2, COL_BODY);
+        drawLightOff(LIGHT_CX, cy, LIGHT_R);
+    }
 }
 
 // ======================== 串口应答 ========================
@@ -408,14 +449,17 @@ void updatePattern() {
     unsigned long duration = step[1].as<unsigned long>();
 
     if (patternStepStartTime == 0) {
+        // 增量切换，不重绘整个屏幕
         String tl = String(targetLight);
-        currentLight = tl;
-        drawTrafficLight(tl);
+        setLight(tl);
         patternStepStartTime = now;
         Serial.printf("[PATTERN] Step %zu: %s for %lums\n", patternIndex, targetLight, duration);
     }
 
-    if (now - patternStepStartTime >= duration) {
+    if (now - patternStepStartTime >= duration - patternDrift) {
+        // 记录实际过渡耗时，补偿到下一步
+        patternDrift = millis() - now;
+        if (patternDrift > duration) patternDrift = 0;  // 防溢出
         patternIndex++;
         patternStepStartTime = 0;
     }
@@ -424,6 +468,7 @@ void updatePattern() {
 // ======================== 初始化 ========================
 void setup() {
     Serial.begin(SERIAL_BAUD);
+    Serial.setRxBufferSize(256);  // 增大串口缓冲区，降低溢出概率
     delay(200);
 
     Serial.println();
