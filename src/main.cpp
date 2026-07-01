@@ -3,12 +3,12 @@
  * ==================================================
  * 供 AI Agent (Claude 等) 通过 USB 串口控制 ST7735 TFT 红绿灯
  *
- * UI 布局:
+ * UI 布局 (128×128):
  *   ┌────────────────────────────────┐
- *   │  (🔴)       (🟡)       (🟢)    │ ← 横向红绿灯
+ *   │     (🔴)   (🟡)   (🟢)        │ ← 加大横向红绿灯
  *   │────────────────────────────────│
- *   │ CPU ███████░░░ 73%             │ ← 10 格矩形条
- *   │ MEM ██████░░░░░ 65%            │ ← 10 格矩形条
+ *   │  CPU ███████░░ 73%             │ ← 一行: 标题|10格|百分比
+ *   │  MEM ██████░░░ 65%            │
  *   └────────────────────────────────┘
  *
  * 串口协议 (115200 baud, 8N1):
@@ -29,29 +29,29 @@
 
 // ======================== UI 布局 (128×128) ========================
 
-// 横向红绿灯
-#define TL_BODY_X      14
+// 横向红绿灯 (加大面积)
+#define TL_BODY_X      10
 #define TL_BODY_Y      1
-#define TL_BODY_W      100
-#define TL_BODY_H      26
-#define TL_BODY_R      4
+#define TL_BODY_W      108
+#define TL_BODY_H      46
+#define TL_BODY_R      6
 
-#define TL_CY          14          // 灯中心 Y
-#define TL_R           7           // 灯半径
+#define TL_CY          24          // 灯中心 Y
+#define TL_R           13          // 灯半径 (加大)
 #define TL_RED_X       31          // 红灯 X
 #define TL_YELLOW_X    64          // 黄灯 X
 #define TL_GREEN_X     97          // 绿灯 X
 
-// CPU / MEM 条形图
-#define BAR_X          0
-#define BAR_Y_CPU      32
-#define BAR_Y_MEM      48
-#define BAR_W          9           // 每个格子宽度
-#define BAR_H          10          // 每个格子高度
-#define BAR_GAP        2           // 格子间距
-#define BAR_COUNT      10
-#define BAR_TOTAL_W    (BAR_COUNT * (BAR_W + BAR_GAP) - BAR_GAP)  // 108px
-#define BAR_START_X    10          // 居中: (128-108)/2=10
+// CPU / MEM 一行布局: 标题 | 10格条形图 | 百分比
+#define ROW1_Y         52          // CPU 行 Y
+#define ROW2_Y         63          // MEM 行 Y
+#define ROW_LABEL_X    2           // "CPU"/"MEM" 标题 X
+#define ROW_BAR_X      20          // 条形图起始 X
+#define ROW_BAR_W      7           // 每格宽度
+#define ROW_BAR_H      7           // 每格高度
+#define ROW_BAR_GAP    1           // 格间距
+#define ROW_VALUE_X    108         // 百分比数值 X
+#define BAR_COUNT      10          // 格子数
 
 // 颜色
 #define COL_BG        0x0000   // 黑色背景
@@ -106,22 +106,28 @@ unsigned long patternDrift = 0;
 void drawLightOff(int cx, int cy, int r) {
     tft.fillCircle(cx, cy, r, COL_DARK);
     tft.drawCircle(cx, cy, r, COL_LIGHT_EDGE);
-    tft.fillCircle(cx, cy, r - 3, COL_LIGHT_INNER);
+    tft.fillCircle(cx, cy, r - 4, COL_LIGHT_INNER);
 }
 
 void drawLightOn(int cx, int cy, int r, uint16_t color, uint16_t glowColor) {
     tft.fillCircle(cx, cy, r + 2, glowColor);
     tft.fillCircle(cx, cy, r, color);
     tft.drawCircle(cx, cy, r, 0xFFFF);
-    tft.fillCircle(cx - 3, cy - 3, 4, COL_HIGHLIGHT);
-    tft.fillCircle(cx - 4, cy - 4, 2, COL_HIGHLIGHT);
+    // 高光
+    tft.fillCircle(cx - 4, cy - 4, 5, COL_HIGHLIGHT);
+    tft.fillCircle(cx - 6, cy - 6, 3, COL_HIGHLIGHT);
+    tft.fillCircle(cx - 7, cy - 7, 1, COL_HIGHLIGHT);
 }
 
-/** 横向红绿灯外壳 */
+/** 横向红绿灯外壳 (加大) */
 void drawHousing() {
     tft.fillScreen(COL_BG);
     tft.fillRoundRect(TL_BODY_X, TL_BODY_Y, TL_BODY_W, TL_BODY_H, TL_BODY_R, COL_BODY);
     tft.drawRoundRect(TL_BODY_X, TL_BODY_Y, TL_BODY_W, TL_BODY_H, TL_BODY_R, COL_BODY_EDGE);
+    // 底部高光线
+    tft.drawLine(TL_BODY_X + TL_BODY_R, TL_BODY_Y + TL_BODY_H,
+                 TL_BODY_X + TL_BODY_W - TL_BODY_R, TL_BODY_Y + TL_BODY_H,
+                 COL_BODY_EDGE);
 }
 
 /** 全量绘制红绿灯 */
@@ -137,52 +143,52 @@ void drawTrafficLight(const String& color) {
 }
 
 /** 绘制 10 格条形图 */
-void drawBars(int x, int y, int value, uint16_t fillColor) {
+void drawBars(int y, int value, uint16_t fillColor) {
     for (int i = 0; i < BAR_COUNT; i++) {
-        int bx = x + i * (BAR_W + BAR_GAP);
+        int bx = ROW_BAR_X + i * (ROW_BAR_W + ROW_BAR_GAP);
         int threshold = (i + 1) * 10;
         if (value >= threshold) {
-            tft.fillRect(bx, y, BAR_W, BAR_H, fillColor);
-        } else if (value >= threshold - 9) {
-            // 部分填充 (当前格)
-            int partial = (value % 10) * BAR_W / 10;
-            if (partial > 0) {
-                tft.fillRect(bx, y, partial, BAR_H, fillColor);
-            }
-            tft.drawRect(bx, y, BAR_W, BAR_H, fillColor);
+            tft.fillRect(bx, y, ROW_BAR_W, ROW_BAR_H, fillColor);
+        } else if (value > i * 10) {
+            int partial = (value % 10) * ROW_BAR_W / 10;
+            if (partial > 0) tft.fillRect(bx, y, partial, ROW_BAR_H, fillColor);
+            tft.drawRect(bx, y, ROW_BAR_W, ROW_BAR_H, fillColor);
         } else {
-            tft.drawRect(bx, y, BAR_W, BAR_H, fillColor);
+            tft.drawRect(bx, y, ROW_BAR_W, ROW_BAR_H, fillColor);
         }
     }
 }
 
-/** 更新健康面板 (不重绘红绿灯) */
+/** 更新健康面板 — 一行一条: 标题 | 10格条 | 百分比 */
 void drawHealthPanel(int cpu, int mem) {
-    tft.setTextColor(COL_LABEL, COL_BG);
     tft.setTextSize(1);
 
-    // CPU 标签 + 数值
-    tft.setCursor(2, BAR_Y_CPU + 1);
+    // ── CPU 行 ──
+    tft.setCursor(ROW_LABEL_X, ROW1_Y);
+    tft.setTextColor(COL_LABEL, COL_BG);
     tft.print("CPU");
-    tft.setCursor(2 + BAR_TOTAL_W + 16, BAR_Y_CPU + 1);
+
+    // 先清空上一轮的条形区
+    tft.fillRect(ROW_BAR_X, ROW1_Y, 128 - ROW_BAR_X, ROW_BAR_H, COL_BG);
+    drawBars(ROW1_Y, cpu, COL_CPU_BAR);
+
+    tft.setCursor(ROW_VALUE_X, ROW1_Y);
     tft.setTextColor(COL_VALUE, COL_BG);
     tft.print(cpu);
     tft.print("%");
 
-    // CPU 条
-    drawBars(BAR_START_X, BAR_Y_CPU + 10, cpu, COL_CPU_BAR);
-
-    // MEM 标签 + 数值
+    // ── MEM 行 ──
+    tft.setCursor(ROW_LABEL_X, ROW2_Y);
     tft.setTextColor(COL_LABEL, COL_BG);
-    tft.setCursor(2, BAR_Y_MEM + 1);
     tft.print("MEM");
-    tft.setCursor(2 + BAR_TOTAL_W + 16, BAR_Y_MEM + 1);
+
+    tft.fillRect(ROW_BAR_X, ROW2_Y, 128 - ROW_BAR_X, ROW_BAR_H, COL_BG);
+    drawBars(ROW2_Y, mem, COL_MEM_BAR);
+
+    tft.setCursor(ROW_VALUE_X, ROW2_Y);
     tft.setTextColor(COL_VALUE, COL_BG);
     tft.print(mem);
     tft.print("%");
-
-    // MEM 条
-    drawBars(BAR_START_X, BAR_Y_MEM + 10, mem, COL_MEM_BAR);
 }
 
 /** 完整 UI 绘制 (红绿灯 + 健康面板) */
