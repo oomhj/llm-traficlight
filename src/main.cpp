@@ -439,7 +439,7 @@ void setup() {
 
     // 初始化 TFT
     tft.init();
-    tft.setRotation(2);
+    tft.setRotation(0);
     tft.fillScreen(COL_BG);
     tft.setTextColor(0xFFFF, COL_BG);
     tft.setTextSize(1);
