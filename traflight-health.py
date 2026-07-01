@@ -78,9 +78,11 @@ def evaluate(data):
 
 def update_bars(cpu=0, mem=0):
     """更新 CPU/MEM 条形图（通过 daemon 队列，统一串口管理）"""
+    import subprocess
     script_dir = os.path.dirname(os.path.abspath(__file__))
     daemon_py = os.path.join(script_dir, "traflight-daemon.py")
-    os.system(f"python3 {daemon_py} send 'health --cpu {cpu} --mem {mem}' >/dev/null 2>&1")
+    subprocess.run(["python3", daemon_py, "send", f"health --cpu {cpu} --mem {mem}"],
+                   capture_output=True)
 
 
 

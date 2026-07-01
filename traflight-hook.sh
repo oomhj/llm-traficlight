@@ -1,6 +1,6 @@
 #!/bin/bash
 # traflight-hook.sh — Claude Code hook 脚本
-# 通过 Python 守护进程控制红绿灯，避免串口并发冲突
+# 通过 Python 守护进程队列控制红绿灯
 #
 # 用法:
 #   PreToolUse[Bash]:           bash traflight-hook.sh before
@@ -8,13 +8,13 @@
 #   PostToolUseFailure[Bash]:   bash traflight-hook.sh failure
 
 DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-DAEMON="$DIR/traflight-daemon.sh"
+PYDAEMON="$DIR/traflight-daemon.py"
 
 # 确保守护进程在运行
-"$DAEMON" start 2>/dev/null
+python3 "$PYDAEMON" start 2>/dev/null
 
 case "$1" in
-    before)  "$DAEMON" before  >/dev/null 2>&1 ;;
-    success) "$DAEMON" success >/dev/null 2>&1 ;;
-    failure) "$DAEMON" failure >/dev/null 2>&1 ;;
+    before)  python3 "$PYDAEMON" send "yellow" >/dev/null 2>&1 ;;
+    success) python3 "$PYDAEMON" send "green" >/dev/null 2>&1 ;;
+    failure) python3 "$PYDAEMON" send "blink_red" >/dev/null 2>&1 ;;
 esac
