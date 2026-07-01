@@ -84,9 +84,8 @@ def send_cmd(ser, cmd_dict):
     line = json.dumps(cmd_dict) + "\n"
     ser.write(line.encode())
     ser.flush()
-    # 小延时等待响应到达串口缓冲区
-    time.sleep(0.08)
-    # 读取并丢弃响应 (本 daemon 不需要解析返回)
+    # 极短延时等响应到达，然后丢弃 (daemon 不需解析)
+    time.sleep(0.01)
     while ser.in_waiting:
         ser.readline()
 
