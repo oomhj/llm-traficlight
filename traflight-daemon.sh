@@ -80,10 +80,11 @@ case "$1" in
             echo "stopped"
         fi
         ;;
-    before)  send_cmd "yellow" ;;
-    success) send_cmd "green" ;;
-    failure) send_cmd "blink red -n 3" ;;
+    before)   send_cmd "yellow" ;;
+    success)  send_cmd "green" ;;
+    failure)  send_cmd "blink red -n 3" ;;
+    notify|red) send_cmd "red" ;;
     *)
-        echo "Usage: $0 {start|stop|restart|status|before|success|failure}"
+        echo "Usage: $0 {start|stop|restart|status|before|success|failure|notify}"
         ;;
 esac
