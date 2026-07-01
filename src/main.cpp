@@ -58,7 +58,10 @@
 #define COL_GREEN   0x07E0   // 绿色
 #define COL_G_GLOW  0x87E0   // 绿色辉光
 #define COL_HIGHLIGHT 0xFFFF // 高光白
-#define COL_POLE    0x2104   // 灯柱
+
+// 灯效内部颜色
+#define COL_LIGHT_EDGE   0x528A  // 未点亮灯泡边框
+#define COL_LIGHT_INNER  0x28A5  // 未点亮灯泡内凹
 
 // ======================== 全局变量 ========================
 TFT_eSPI tft = TFT_eSPI();
@@ -88,8 +91,8 @@ unsigned long patternStepStartTime = 0;
 
 void drawLightOff(int cx, int cy, int r) {
     tft.fillCircle(cx, cy, r, COL_DARK);
-    tft.drawCircle(cx, cy, r, 0x528A);
-    tft.fillCircle(cx, cy, r - 4, 0x28A5);
+    tft.drawCircle(cx, cy, r, COL_LIGHT_EDGE);
+    tft.fillCircle(cx, cy, r - 4, COL_LIGHT_INNER);
 }
 
 void drawLightOn(int cx, int cy, int r, uint16_t color, uint16_t glowColor) {
@@ -205,7 +208,7 @@ void processCommand(const String& line) {
             blinkingActive = false;
             patternActive = false;
             setLight(v);
-            Serial.printf("[CMD] light → %s\n", v.c_str());
+            sendLog("light → " + v);
             sendOk();
 
         } else if (command == "blink") {
@@ -301,7 +304,7 @@ void processCommand(const String& line) {
         blinkingActive = false;
         patternActive = false;
         setLight(t);
-        Serial.printf("[CMD] light → %s\n", t.c_str());
+        sendLog("light → " + t);
         sendOk();
 
     } else if (t == "status") {

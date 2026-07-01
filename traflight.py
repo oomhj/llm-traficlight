@@ -27,6 +27,11 @@ import time
 import argparse
 import glob
 import os
+try:
+    import serial
+except ImportError:
+    print("❌ pyserial not installed. Run: pip install pyserial", file=sys.stderr)
+    sys.exit(1)
 
 
 # ======================== 配置 ========================
@@ -103,7 +108,6 @@ class TrafficLight:
             sys.exit(1)
 
         try:
-            import serial
             self.ser = serial.Serial(
                 self.port,
                 SERIAL_BAUD,
