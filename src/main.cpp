@@ -29,22 +29,22 @@
 
 // ======================== UI 布局 (128×128) ========================
 
-// 横向红绿灯 (长边撑满 128)
-#define TL_BODY_X      2
+// 横向红绿灯 (撑满 128，灯最大 r=20)
+#define TL_BODY_X      0
 #define TL_BODY_Y      4
-#define TL_BODY_W      124
-#define TL_BODY_H      76
-#define TL_BODY_R      8
+#define TL_BODY_W      128
+#define TL_BODY_H      48
+#define TL_BODY_R      6
 
-#define TL_CY          42          // 灯中心 Y
-#define TL_R           16          // 灯半径
+#define TL_CY          28          // 灯中心 Y
+#define TL_R           20          // 灯半径 (最大)
 #define TL_RED_X       22          // 红灯 X
 #define TL_YELLOW_X    64          // 黄灯 X
 #define TL_GREEN_X     106         // 绿灯 X
 
 // CPU / MEM 一行布局: 标题 | 20格条形图 | 百分比
-#define ROW1_Y         85          // CPU 行 Y
-#define ROW2_Y         95          // MEM 行 Y
+#define ROW1_Y         58          // CPU 行 Y
+#define ROW2_Y         68          // MEM 行 Y
 #define ROW_LABEL_X    2           // "CPU"/"MEM" 标题 X
 #define ROW_BAR_X      21          // 条形图起始 X
 #define ROW_BAR_W      3           // 每格宽度
@@ -113,10 +113,10 @@ void drawLightOn(int cx, int cy, int r, uint16_t color, uint16_t glowColor) {
     tft.fillCircle(cx, cy, r + 2, glowColor);
     tft.fillCircle(cx, cy, r, color);
     tft.drawCircle(cx, cy, r, 0xFFFF);
-    // 高光
-    tft.fillCircle(cx - 4, cy - 4, 5, COL_HIGHLIGHT);
-    tft.fillCircle(cx - 6, cy - 6, 3, COL_HIGHLIGHT);
-    tft.fillCircle(cx - 7, cy - 7, 1, COL_HIGHLIGHT);
+    // 高光 (适应 r=20)
+    tft.fillCircle(cx - 6, cy - 6, 6, COL_HIGHLIGHT);
+    tft.fillCircle(cx - 8, cy - 8, 4, COL_HIGHLIGHT);
+    tft.fillCircle(cx - 10, cy - 10, 2, COL_HIGHLIGHT);
 }
 
 /** 横向红绿灯外壳 (加大) */
