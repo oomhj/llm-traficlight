@@ -84,6 +84,8 @@ def parse_cmd(cmd_str):
         return {"cmd": "light", "value": "red"}
     elif c == "blink_red":
         return {"cmd": "blink", "value": "red", "times": 3, "interval": 500}
+    elif c == "blink_all":
+        return {"cmd": "blink_all", "times": 3, "interval": 500}
     elif c == "send_raw":
         # "send_raw <json_string>"
         raw = " ".join(parts[1:])

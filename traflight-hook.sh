@@ -17,5 +17,5 @@ case "$1" in
     before)  python3 "$PYDAEMON" send "yellow" >/dev/null 2>&1 ;;
     success) python3 "$PYDAEMON" send "green" >/dev/null 2>&1 ;;
     failure) python3 "$PYDAEMON" send "red" >/dev/null 2>&1 ;;
-    notify)  python3 "$PYDAEMON" send "blink_red" >/dev/null 2>&1 ;;
+    notify)  python3 "$PYDAEMON" send "blink_all" >/dev/null 2>&1 ;;
 esac

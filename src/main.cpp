@@ -93,6 +93,12 @@ unsigned long lastBlinkToggle = 0;
 
 // 序列
 bool patternActive = false;
+
+// 三灯齐闪
+bool blinkAllActive = false;
+unsigned long blinkAllInterval = 0;
+bool blinkAllState = false;
+unsigned long blinkAllLastToggle = 0;
 JsonDocument patternSteps;
 size_t patternIndex = 0;
 unsigned long patternStepStartTime = 0;
@@ -213,7 +219,7 @@ int lightX(const String& color) {
 }
 
 bool setLight(const String& color) {
-    if (blinkingActive || patternActive) return false;
+    if (blinkingActive || patternActive || blinkAllActive) return false;
     if (currentLight == color) return true;
 
     int prevX = lightX(currentLight);
@@ -324,6 +330,7 @@ void processCommand(const String& line) {
                 return;
             }
             blinkingActive = false;
+            blinkAllActive = false;
             patternActive = false;
             setLight(v);
             sendLog("light → " + v);
@@ -371,6 +378,7 @@ void processCommand(const String& line) {
                 return;
             }
             blinkingActive = false;
+            blinkAllActive = false;
             patternSteps.clear();
             patternSteps["steps"] = steps;
             patternIndex = 0;
@@ -383,6 +391,27 @@ void processCommand(const String& line) {
             res["status"] = "ok";
             res["action"] = "pattern";
             res["steps"] = steps.size();
+            String out;
+            serializeJson(res, out);
+            sendResponse(out);
+
+        } else if (command == "blink_all") {
+            int times = cmd["times"] | 3;
+            int interval = cmd["interval"] | 500;
+            blinkingActive = false;
+            blinkAllActive = false;
+            patternActive = false;
+            blinkAllActive = true;
+            blinkAllInterval = interval;
+            blinkAllState = false;
+            blinkAllLastToggle = 0;
+            drawTrafficLight("off");
+            currentLight = "off";
+            sendLog("blink_all x" + String(times) + " @" + String(interval) + "ms");
+            JsonDocument res;
+            res["status"] = "ok";
+            res["action"] = "blink_all";
+            res["times"] = times;
             String out;
             serializeJson(res, out);
             sendResponse(out);
@@ -417,7 +446,8 @@ void processCommand(const String& line) {
     // 文本快捷命令
     String t = line; t.trim(); t.toLowerCase();
     if (t == "red" || t == "yellow" || t == "green" || t == "off") {
-        blinkingActive = false; patternActive = false;
+        blinkingActive = false;
+            blinkAllActive = false; patternActive = false;
         setLight(t); sendLog("light → " + t); sendOk();
     } else if (t == "status") {
         sendStatus();
@@ -458,6 +488,27 @@ void readSerial() {
 
 // ======================== 非阻塞更新 ========================
 
+void updateBlinkAll() {
+    if (!blinkAllActive) return;
+    unsigned long now = millis();
+    if (now - blinkAllLastToggle >= blinkAllInterval) {
+        blinkAllLastToggle = now;
+        blinkAllState = !blinkAllState;
+        if (blinkAllState) {
+            drawHousing();
+            drawLightOff(TL_RED_X, TL_CY, TL_R);
+            drawLightOff(TL_YELLOW_X, TL_CY, TL_R);
+            drawLightOff(TL_GREEN_X, TL_CY, TL_R);
+            drawLightOn(TL_RED_X, TL_CY, TL_R, COL_RED, COL_RED_GLOW);
+            drawLightOn(TL_YELLOW_X, TL_CY, TL_R, COL_YELLOW, COL_Y_GLOW);
+            drawLightOn(TL_GREEN_X, TL_CY, TL_R, COL_GREEN, COL_G_GLOW);
+        } else {
+            drawTrafficLight("off");
+        }
+        // blinkAll 持续闪烁直到被下一个命令停止
+    }
+}
+
 void updateBlink() {
     if (!blinkingActive) return;
     unsigned long now = millis();
@@ -469,6 +520,7 @@ void updateBlink() {
         setBlinkLight(blinkColor, blinkState);
         if (blinkRemaining <= 0) {
             blinkingActive = false;
+            blinkAllActive = false;
             setLight("off");
             currentLight = "off";
             Serial.println("[BLINK] Finished");
@@ -542,6 +594,7 @@ void setup() {
 
 void loop() {
     readSerial();
+    updateBlinkAll();
     updateBlink();
     updatePattern();
 }
