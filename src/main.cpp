@@ -142,20 +142,28 @@ void drawTrafficLight(const String& color) {
     else if (color == "green")  drawLightOn(TL_GREEN_X, TL_CY, TL_R, COL_GREEN, COL_G_GLOW);
 }
 
-/** 绘制 20 格条形图 (每格 5%) */
-void drawBars(int y, int value, uint16_t fillColor) {
-    int perBar = 100 / BAR_COUNT;  // 每格代表 5%
+/** 根据负载值返回整体颜色 (0-50%绿, 50-80%黄, 80-100%红) */
+uint16_t loadColor(int value) {
+    if (value <= 50) return 0x07E0;   // 绿色
+    if (value <= 80) return 0xFFE0;   // 黄色
+    return 0xF800;                     // 红色
+}
+
+/** 绘制 20 格条形图 (每格 5%，整体颜色随负载变化) */
+void drawBars(int y, int value) {
+    uint16_t color = loadColor(value);
+    int perBar = 100 / BAR_COUNT;
     for (int i = 0; i < BAR_COUNT; i++) {
         int bx = ROW_BAR_X + i * (ROW_BAR_W + ROW_BAR_GAP);
         int filled = (i + 1) * perBar;
         if (value >= filled) {
-            tft.fillRect(bx, y, ROW_BAR_W, ROW_BAR_H, fillColor);
+            tft.fillRect(bx, y, ROW_BAR_W, ROW_BAR_H, color);
         } else if (value > i * perBar) {
             int partial = (value % perBar) * ROW_BAR_W / perBar;
-            if (partial > 0) tft.fillRect(bx, y, partial, ROW_BAR_H, fillColor);
-            tft.drawRect(bx, y, ROW_BAR_W, ROW_BAR_H, fillColor);
+            if (partial > 0) tft.fillRect(bx, y, partial, ROW_BAR_H, color);
+            tft.drawRect(bx, y, ROW_BAR_W, ROW_BAR_H, color);
         } else {
-            tft.drawRect(bx, y, ROW_BAR_W, ROW_BAR_H, fillColor);
+            tft.drawRect(bx, y, ROW_BAR_W, ROW_BAR_H, color);
         }
     }
 }
@@ -171,7 +179,7 @@ void drawHealthPanel(int cpu, int mem) {
 
     // 先清空上一轮的条形区
     tft.fillRect(ROW_BAR_X, ROW1_Y, 128 - ROW_BAR_X, ROW_BAR_H, COL_BG);
-    drawBars(ROW1_Y, cpu, COL_CPU_BAR);
+    drawBars(ROW1_Y, cpu);
 
     tft.setCursor(ROW_VALUE_X, ROW1_Y);
     tft.setTextColor(COL_VALUE, COL_BG);
@@ -184,7 +192,7 @@ void drawHealthPanel(int cpu, int mem) {
     tft.print("MEM");
 
     tft.fillRect(ROW_BAR_X, ROW2_Y, 128 - ROW_BAR_X, ROW_BAR_H, COL_BG);
-    drawBars(ROW2_Y, mem, COL_MEM_BAR);
+    drawBars(ROW2_Y, mem);
 
     tft.setCursor(ROW_VALUE_X, ROW2_Y);
     tft.setTextColor(COL_VALUE, COL_BG);

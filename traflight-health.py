@@ -77,11 +77,10 @@ def evaluate(data):
 
 
 def update_bars(cpu=0, mem=0):
-    """更新 CPU/MEM 条形图（通过 daemon 队列，避免串口竞争）"""
+    """更新 CPU/MEM 条形图（通过 daemon 队列，统一串口管理）"""
     script_dir = os.path.dirname(os.path.abspath(__file__))
-    daemon = os.path.join(script_dir, "traflight-daemon.sh")
-    os.system(f"bash \"{daemon}\" start >/dev/null 2>&1")
-    os.system(f"bash \"{daemon}\" send_raw \"health --cpu {cpu} --mem {mem}\" >/dev/null 2>&1")
+    daemon_py = os.path.join(script_dir, "traflight-daemon.py")
+    os.system(f"python3 {daemon_py} send 'health --cpu {cpu} --mem {mem}' >/dev/null 2>&1")
 
 
 
@@ -90,9 +89,8 @@ def main():
     color = evaluate(data)
     data["health"] = color
 
-    # 更新 CPU/MEM 条（不影响红绿灯）
-    if "--light" in sys.argv or "--watch" in sys.argv:
-        update_bars(data["cpu_percent"], data["mem_percent"])
+    # 更新 CPU/MEM 条（始终执行，不影响红绿灯）
+    update_bars(data["cpu_percent"], data["mem_percent"])
 
     # 打印 JSON
     print(json.dumps(data, indent=2))

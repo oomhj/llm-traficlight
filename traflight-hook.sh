@@ -1,6 +1,6 @@
 #!/bin/bash
 # traflight-hook.sh — Claude Code hook 脚本
-# 通过守护进程控制红绿灯，避免串口并发冲突
+# 通过 Python 守护进程控制红绿灯，避免串口并发冲突
 #
 # 用法:
 #   PreToolUse[Bash]:           bash traflight-hook.sh before

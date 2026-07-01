@@ -131,9 +131,8 @@ class TrafficLight:
         if not self.ser:
             self.connect()
 
-        # 清空缓冲区中的旧数据，避免前一个 hook 的残留响应干扰
+        # 清空缓冲区残留，避免读到前一个 hook 的响应
         self.ser.reset_input_buffer()
-        time.sleep(0.1)  # 等待残留数据到达
 
         line = json.dumps(cmd_dict) + "\n"
         if not quiet:
@@ -142,8 +141,10 @@ class TrafficLight:
         # 发送
         self.ser.write(line.encode("utf-8"))
 
-        # 读取响应 (最多等 CMD_TIMEOUT 秒)
+        # 读取响应：收集全部行，返回最后一条有效 JSON
+        # （跳过中间 hook 残留的旧响应）
         deadline = time.time() + CMD_TIMEOUT
+        last_resp = {"status": "error", "message": "timeout"}
         while time.time() < deadline:
             if self.ser.in_waiting:
                 raw = self.ser.readline().decode("utf-8", errors="replace").strip()
@@ -151,15 +152,14 @@ class TrafficLight:
                     if not quiet:
                         print(f"← {raw}")
                     try:
-                        return json.loads(raw)
+                        parsed = json.loads(raw)
+                        last_resp = parsed  # 持续更新，最后一条才是当前命令的响应
                     except json.JSONDecodeError:
-                        # 可能是启动日志，跳过
                         continue
             else:
                 time.sleep(0.05)
 
-        print("⚠️  No response (timeout)", file=sys.stderr)
-        return {"status": "error", "message": "timeout"}
+        return last_resp
 
     def close(self):
         """关闭串口"""
