@@ -58,9 +58,6 @@
 #define COL_BODY      0x2104   // 深灰外壳
 #define COL_BODY_EDGE 0x4208   // 亮灰边
 #define COL_DARK      0x3186   // 未点亮时的暗色
-#define COL_CPU_BAR   0x33FF   // CPU 条颜色 (青色)
-#define COL_MEM_BAR   0x07E0   // MEM 条颜色 (绿色)
-#define COL_BAR_EMPTY 0x2104   // 空格子颜色
 #define COL_RED       0xF800
 #define COL_RED_GLOW  0xFAA0
 #define COL_YELLOW    0xFFE0
