@@ -1,34 +1,39 @@
-# LLM Traffic Light Project
+# LLM Traffic Light
 
-This project has a physical ESP8266 traffic light (ST7735 TFT 128x128) controlled via USB serial.
+物理红绿灯 — Agent 状态指示器。
 
-## Quick Reference
+## 状态约定
 
-| Command | Description |
-|---------|-------------|
-| `python3 traflight.py red` | Red light |
-| `python3 traflight.py green` | Green light |
-| `python3 traflight.py yellow` | Yellow light |
-| `python3 traflight.py off` | All off |
-| `python3 traflight.py blink red -n 5` | Flash red 5 times |
-| `python3 traflight.py pattern "red:3,green:5"` | Sequence |
-| `python3 traflight.py cycle` | Standard cycle |
-| `python3 traflight.py status` | Query state |
-| `python3 traflight.py --port /dev/cu.usbserial-210 <cmd>` | Specify port |
+| 灯光 | 含义 | 时机 |
+|------|------|------|
+| 🟡 黄灯 | 正在执行任务 | 编译、搜索、等待命令执行 |
+| 🟢 绿灯 | 执行完成 | 任务成功结束 |
+| 🔴 红灯 | 需要用户确认 | 需要决策、被阻塞 |
+| 🔴 闪烁 | 错误 / 告警 | 需要用户注意 |
 
-Type `/traffic-light` for full skill documentation.
+## 快速命令
 
-## Project Structure
+```bash
+# 状态指示
+python3 traflight.py yellow    # 🟡 工作中
+python3 traflight.py green     # 🟢 完成
+python3 traflight.py red       # 🔴 需要输入
+python3 traflight.py blink red -n 5  # ⚠️ 告警
 
-```
-.claude/skills/traffic-light.md     ← Skill definition
-src/main.cpp                        ← ESP8266 firmware
-traflight.py                        ← Python CLI bridge
-User_Setup_ST7735.h                 ← TFT pin config
-platformio.ini                      ← PlatformIO config
+# 查询
+python3 traflight.py status
+python3 traflight.py scan
 ```
 
-## Build & Flash
+## 项目文件
+
+```
+traflight.py                → CLI 控制
+src/main.cpp                → ESP8266 固件
+.claude/skills/traffic-light.md  → Skill 完整文档
+```
+
+## 编译烧录
 
 ```bash
 pio run --target upload
