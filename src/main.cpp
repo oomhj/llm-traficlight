@@ -220,8 +220,6 @@ void setLight(const String& color) {
     if (currentLight == color) return;
 
     int prevX = lightX(currentLight);
-    int newX  = lightX(color);
-
     if (prevX > 0) {
         tft.fillCircle(prevX, TL_CY, TL_R + 3, COL_BODY);
         drawLightOff(prevX, TL_CY, TL_R);
@@ -259,7 +257,7 @@ void blinkAll(int times) {
         drawLightOn(TL_YELLOW_X, TL_CY, TL_R, COL_YELLOW, COL_Y_GLOW);
         drawLightOn(TL_GREEN_X, TL_CY, TL_R, COL_GREEN, COL_G_GLOW);
         delay(250);
-        drawTrafficLight("off");
+        setLight("off");
         delay(250);
     }
 }
@@ -351,7 +349,7 @@ void processCommand(const String& line) {
             blinkOffTime = interval;
             blinkState = false;
             lastBlinkToggle = 0;
-            drawTrafficLight("off");
+            setLight("off");
             currentLight = "off";
             sendLog("blink " + v + " x" + String(times) + " @" + String(interval) + "ms");
             JsonDocument res;
@@ -380,7 +378,7 @@ void processCommand(const String& line) {
             patternActive = true;
             patternIndex = 0;
             patternStepStartTime = 0;
-            drawTrafficLight("off");
+            setLight("off");
             currentLight = "off";
             sendLog("pattern " + String(steps.size()) + " steps");
             JsonDocument res;
@@ -473,7 +471,7 @@ void updateBlink() {
         setBlinkLight(blinkColor, blinkState);
         if (blinkRemaining <= 0) {
             blinkingActive = false;
-            drawTrafficLight("off");
+            setLight("off");
             currentLight = "off";
             Serial.println("[BLINK] Finished");
         }
@@ -486,8 +484,8 @@ void updatePattern() {
     JsonArray steps = patternSteps["steps"].as<JsonArray>();
     if (patternIndex >= steps.size()) {
         patternActive = false;
-        drawTrafficLight("off");
-        currentLight = "off";
+        setLight("off");
+            currentLight = "off";
         Serial.println("[PATTERN] Finished");
         return;
     }
