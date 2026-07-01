@@ -505,6 +505,8 @@ void updateBlinkAll() {
         } else {
             drawTrafficLight("off");
         }
+        // 恢复健康面板显示（drawHousing 清空了屏幕）
+        drawHealthPanel(cpuPercent, memPercent);
         // blinkAll 持续闪烁直到被下一个命令停止
     }
 }
