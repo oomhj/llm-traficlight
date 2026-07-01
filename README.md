@@ -188,115 +188,75 @@ help      → 显示帮助信息
 {"status":"ok","light":"red","blinking":false,"pattern_active":false,"uptime_ms":1234567}
 ```
 
-## Agent 调用示例
-
-### Claude / 任意 LLM Agent (Python 串口客户端)
-
-```python
-import serial
-import json
-import time
-
-# 1. 打开串口 (Linux: /dev/ttyUSB0, Mac: /dev/cu.usbserial-xxx, Windows: COM3)
-ser = serial.Serial('/dev/ttyUSB0', 115200, timeout=5)
-time.sleep(2)  # 等待 ESP8266 重启完成
-
-def send_cmd(cmd_dict):
-    """发送 JSON 命令并读取响应"""
-    line = json.dumps(cmd_dict) + '\n'
-    ser.write(line.encode())
-    time.sleep(0.1)
-    resp = ser.readline().decode().strip()
-    return json.loads(resp) if resp else {}
-
-# 2. 查询状态
-print("Status:", send_cmd({"cmd": "status"}))
-
-# 3. 绿灯 5 秒
-send_cmd({"cmd": "light", "value": "green"})
-time.sleep(5)
-
-# 4. 黄灯 2 秒
-send_cmd({"cmd": "light", "value": "yellow"})
-time.sleep(2)
-
-# 5. 红灯闪烁警示
-send_cmd({"cmd": "blink", "value": "red", "times": 3, "interval": 400})
-
-# 6. 或者一步到位用 pattern 执行完整周期
-send_cmd({
-    "cmd": "pattern",
-    "steps": [
-        ["green", 5000],
-        ["yellow", 2000],
-        ["red", 5000]
-    ]
-})
-
-ser.close()
-```
-
-### Agent 命令行测试 (screen / putty)
-
-Mac/Linux 用 `screen` 直接测试：
+## Agent 调用示例 — traflight CLI (推荐)
 
 ```bash
-# 连接串口
-screen /dev/ttyUSB0 115200
+# 安装依赖
+pip install pyserial
+chmod +x traflight.py        # 或 python3 traflight.py <cmd>
 
-# 输入命令（按回车发送）
-red
-
-# 或者用 echo 发送 JSON
-echo '{"cmd":"light","value":"green"}' > /dev/ttyUSB0
+# 设置别名 (方便 Agent 调用)
+alias traflight='python3 /path/to/traflight.py'
 ```
 
-Windows 用 PuTTY：选择 Serial，填写 COM3，波特率 115200。
+### 简单控制
 
-### 在 Claude 中使用 MCP 控制
-
-创建一个 MCP 工具，让 Claude Agent 通过串口控制红绿灯：
-
-<details>
-<summary>📋 MCP Tool 配置示例 (click to expand)</summary>
-
-```json
-{
-  "traffic_light": {
-    "description": "控制 ESP8266 红绿灯 (串口)",
-    "input_schema": {
-      "type": "object",
-      "properties": {
-        "command": {
-          "type": "string",
-          "enum": ["light", "blink", "pattern", "status"],
-          "description": "命令类型"
-        },
-        "value": {
-          "type": "string",
-          "enum": ["red", "yellow", "green", "off"],
-          "description": "灯色 (仅 light/blink)"
-        },
-        "times": {
-          "type": "integer",
-          "description": "闪烁次数 (仅 blink)"
-        },
-        "interval": {
-          "type": "integer",
-          "description": "闪烁间隔ms (仅 blink)"
-        },
-        "steps": {
-          "type": "array",
-          "description": "灯光序列 (仅 pattern)"
-        }
-      },
-      "required": ["command"]
-    }
-  }
-}
+```bash
+# Agent 只需执行:
+traflight green          # 亮绿灯
+sleep 5                  # 等待 5 秒
+traflight yellow         # 变黄
+sleep 2
+traflight red            # 变红
+traflight off            # 关灯
 ```
 
-</details>
+### 闪烁
+
+```bash
+traflight blink red              # 红灯闪 3 次 (默认500ms)
+traflight blink green -n 5       # 绿灯闪 5 次
+traflight blink yellow -n 3 -i 300  # 黄灯闪 3 次, 每次300ms
+```
+
+### 灯光序列 (一行搞定)
+
+```bash
+# 格式: "灯色:秒数,灯色:秒数,..."
+traflight pattern "green:5,yellow:2,red:5"
+
+# 标准红绿灯周期
+traflight cycle
+```
+
+### 查询与调试
+
+```bash
+traflight status    # 查看当前灯色和状态
+traflight port      # 显示当前串口路径
+traflight scan      # 扫描所有可用串口
+```
+
+### Agent 完整调用示例
+
+```
+User: 控制红绿灯执行一个完整周期
+
+Agent:
+  traflight cycle
+  
+  # 等待周期结束后红灯闪烁警示
+  traflight blink red -n 3
+```
+
+```
+User: 检查红绿灯当前状态
+
+Agent:
+  traflight status
+  → 🔴 Light: red
+  → ⏱ Uptime: 123s
+```
 
 ## TFT 显示效果
 
@@ -329,10 +289,14 @@ Windows 用 PuTTY：选择 Serial，填写 COM3，波特率 115200。
 
 ```
 llm-traficlight/
-├── platformio.ini                    # PlatformIO 配置
+├── platformio.ini                    # PlatformIO 编译配置
 ├── User_Setup_ST7735.h               # TFT 屏幕引脚配置
+├── requirements.txt                  # Python 依赖
+├── traflight.py                      # 🔧 Agent CLI 桥接层 (推荐方式)
 ├── src/
-│   └── main.cpp                      # 主固件 (串口协议 + TFT 显示)
+│   └── main.cpp                      # ESP8266 固件 (串口协议 + TFT 显示)
+├── docs/
+│   └── DESIGN.md                     # 完整方案设计文档
 └── README.md
 ```
 
