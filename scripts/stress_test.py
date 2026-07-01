@@ -1,137 +1,119 @@
 #!/usr/bin/env python3
 """
-Red-green traffic light stress test.
-Tests single latency, burst throughput, and rapid switching.
+Daemon throughput stress test.
+所有命令通过 daemon 队列发送，不直接操作串口。
 """
-
-import serial
-import json
+import subprocess
 import time
 import sys
+import os
 
-PORT = "/dev/cu.usbserial-210"
-BAUD = 115200
+DAEMON = os.path.join(os.path.dirname(__file__), "..", "traflight-daemon.py")
 
-
-def connect():
-    ser = serial.Serial(PORT, BAUD, timeout=5)
-    time.sleep(2)
-    ser.reset_input_buffer()
-    return ser
-
-
-def send_raw(ser, cmd_dict):
-    """Send JSON, return parsed response and round-trip time."""
-    line = json.dumps(cmd_dict) + "\n"
+def cmd(cmd_str):
+    """通过 daemon 发送命令，返回耗时 (ms)"""
     start = time.perf_counter()
-    ser.write(line.encode())
-    # Read until valid JSON
-    deadline = time.time() + 3
-    while time.time() < deadline:
-        raw = ser.readline().decode(errors="replace").strip()
-        if not raw:
-            continue
-        if raw.startswith("{"):
-            try:
-                resp = json.loads(raw)
-                elapsed = (time.perf_counter() - start) * 1000  # ms
-                return resp, elapsed
-            except json.JSONDecodeError:
-                continue
-    return {"status": "error"}, None
+    subprocess.run(["python3", DAEMON, "send", cmd_str],
+                   capture_output=True, timeout=10)
+    return (time.perf_counter() - start) * 1000
 
 
-def test_latency(ser, label, cmd_dict, n=10):
-    """Measure single command latency over n repetitions."""
-    times = []
-    for _ in range(n):
-        resp, ms = send_raw(ser, cmd_dict)
-        if resp.get("status") == "ok":
-            times.append(ms)
-    avg = sum(times) / len(times)
-    print(f"  {label:<30}  avg={avg:6.1f}ms  min={min(times):6.1f}ms  max={max(times):6.1f}ms  (n={len(times)})")
-
-
-def test_throughput(ser, label, cmd_dict, duration=3):
-    """Send as many commands as possible in `duration` seconds."""
-    count = 0
-    ok = 0
-    deadline = time.time() + duration
-    while time.time() < deadline:
-        resp, ms = send_raw(ser, cmd_dict)
-        count += 1
-        if resp.get("status") == "ok":
-            ok += 1
-    rate = count / duration
-    print(f"  {label:<30}  {count} commands in {duration}s = {rate:.0f}/s  (ok={ok})")
-
-
-def test_burst(ser, label, cmd_list, delay=0):
-    """Send commands in rapid succession, measure each."""
-    times = []
-    ok = 0
-    for cmd in cmd_list:
-        resp, ms = send_raw(ser, cmd)
-        if resp.get("status") == "ok":
-            ok += 1
-        if ms:
-            times.append(ms)
-        if delay > 0:
-            time.sleep(delay)
-    avg = sum(times) / len(times) if times else 0
-    print(f"  {label:<30}  avg={avg:6.1f}ms  ok={ok}/{len(cmd_list)}")
+def wait_queue_empty():
+    """等待 daemon 处理完所有队列"""
+    qdir = "/tmp/traflight-queue"
+    for _ in range(100):
+        if not os.listdir(qdir):
+            return
+        time.sleep(0.01)
 
 
 print("=" * 60)
-print("🚦 Traffic Light Stress Test")
+print("🚦 Daemon Stress Test")
 print("=" * 60)
 print()
 
-ser = connect()
+# 确保 daemon 运行
+subprocess.run(["python3", DAEMON, "start"], capture_output=True)
+time.sleep(1)
 
 # === 1. 单命令延迟 ===
-print("── 1. Latency (single command, avg of 10) ──")
-test_latency(ser, "light red",      {"cmd": "light", "value": "red"}, 10)
-test_latency(ser, "light green",    {"cmd": "light", "value": "green"}, 10)
-test_latency(ser, "light yellow",   {"cmd": "light", "value": "yellow"}, 10)
-test_latency(ser, "light off",      {"cmd": "light", "value": "off"}, 10)
-test_latency(ser, "status",         {"cmd": "status"}, 10)
-test_latency(ser, "blink (3x500)",  {"cmd": "blink", "value": "red", "times": 3, "interval": 500}, 5)
+print("── 1. Daemon send latency (avg of 20) ──")
+for label, cmd_str in [
+    ("light red",      "red"),
+    ("light green",    "green"),
+    ("light yellow",   "yellow"),
+    ("light off",      "off"),
+    ("status",         "status"),
+    ("blink (3x500)",  "blink_red"),
+]:
+    times = []
+    for _ in range(20):
+        t = cmd(cmd_str)
+        times.append(t)
+    wait_queue_empty()
+    avg = sum(times) / len(times)
+    print(f"  {label:<20}  avg={avg:5.1f}ms  min={min(times):5.1f}ms  max={max(times):5.1f}ms")
 
 # === 2. 吞吐量 ===
 print()
-print("── 2. Throughput (max commands in 3s) ──")
-test_throughput(ser, "light green", {"cmd": "light", "value": "green"}, 3)
-test_throughput(ser, "status",      {"cmd": "status"}, 3)
+print("── 2. Throughput (daemon send, 3 seconds) ──")
+for label, cmd_str in [("light green", "green"), ("status", "status")]:
+    count = 0
+    deadline = time.time() + 3
+    while time.time() < deadline:
+        cmd(cmd_str)
+        count += 1
+    wait_queue_empty()
+    elapsed = 3
+    print(f"  {label:<20}  {count} commands in {elapsed}s = {count/elapsed:.0f}/s")
 
-# === 3. 快速切换 ===
+# === 3. 批量突发 ===
 print()
-print("── 3. Rapid alternation (red↔green, 100 switches) ──")
-cmds = []
+print("── 3. Burst: 100 rapid alternations ──")
+start = time.perf_counter()
+cmds = ["red" if i % 2 == 0 else "green" for i in range(100)]
+for c in cmds:
+    cmd(c)
+wait_queue_empty()
+elapsed = time.perf_counter() - start
+print(f"  100 switches in {elapsed:.1f}s = {100/elapsed:.0f}/s  (avg {(elapsed/100)*1000:.1f}ms each)")
+
+# === 4. 大命令 ===
+print()
+print("── 4. Large: 50-step pattern ──")
+steps = []
 for i in range(50):
-    cmds.append({"cmd": "light", "value": "red" if i % 2 == 0 else "green"})
-test_burst(ser, "red↔green × 50 (no delay)", cmds, delay=0)
+    color = "red" if i % 3 == 0 else "green" if i % 3 == 1 else "yellow"
+    steps.append(f"{color}:0.1")
+pattern_str = "pattern " + ",".join(steps)
+t = cmd(pattern_str)
+wait_queue_empty()
+print(f"  50-step pattern: send={t:.1f}ms")
 
-# === 4. 混合负载 ===
+# === 5. 混合负载 ===
 print()
-print("── 4. Mixed load (interleave light/status/blink) ──")
-cmds = []
-for i in range(20):
-    cmds.append({"cmd": "light", "value": "red"})
-    cmds.append({"cmd": "status"})
-    cmds.append({"cmd": "light", "value": "green"})
-    cmds.append({"cmd": "status"})
-cmds.append({"cmd": "blink", "value": "yellow", "times": 2, "interval": 200})
-test_burst(ser, "80 mixed commands", cmds, delay=0.05)
+print("── 5. Mixed: 200 commands ──")
+mixed = []
+for i in range(50):
+    mixed += ["red", "status", "green", "status"]
+mixed.append("blink_red")
+start = time.perf_counter()
+for c in mixed:
+    cmd(c)
+wait_queue_empty()
+elapsed = time.perf_counter() - start
+print(f"  201 commands in {elapsed:.1f}s = {201/elapsed:.0f}/s")
 
-# === 5. 大命令 ===
+# === 6. 队列深度 ===
 print()
-print("── 5. Large command (50-step pattern) ──")
-steps = [[("red" if i % 3 == 0 else "green" if i % 3 == 1 else "yellow"), 100] for i in range(50)]
-resp, ms = send_raw(ser, {"cmd": "pattern", "steps": steps})
-print(f"  50-step pattern:  {ms:.1f}ms  → {resp.get('status')}")
+print("── 6. Queue depth: 500 rapid sends ──")
+start = time.perf_counter()
+for i in range(500):
+    cmd("status")
+wait_queue_empty()
+elapsed = time.perf_counter() - start
+print(f"  500 commands in {elapsed:.1f}s = {500/elapsed:.0f}/s")
 
-ser.close()
 print()
 print("=" * 60)
 print("✅ Done")
