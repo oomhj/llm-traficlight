@@ -22,6 +22,7 @@ import signal
 import sys
 import time
 import glob
+import threading
 
 PORT = "/dev/cu.usbserial-210"
 BAUD = 115200
@@ -93,22 +94,36 @@ def send_cmd(ser, cmd_dict):
         ser.readline()
 
 
-def get_health():
-    """采集 CPU/内存使用率"""
+# 健康数据共享变量 (线程安全, Python int 赋值原子)
+_health_cpu = 0
+_health_mem = 0
+_health_updated = False
+_health_lock = threading.Lock()
+
+
+def health_collector():
+    """后台线程: 每秒采集 CPU(cpu_percent interval=1) + 内存"""
     try:
         import psutil
-        return int(psutil.cpu_percent(interval=0)), int(psutil.virtual_memory().percent)
-    except Exception:
-        return 0, 0
+    except ImportError:
+        return
+
+    global _health_cpu, _health_mem, _health_updated
+    while True:
+        cpu = int(psutil.cpu_percent(interval=1))
+        mem = int(psutil.virtual_memory().percent)
+        with _health_lock:
+            _health_cpu = cpu
+            _health_mem = mem
+            _health_updated = True
 
 
 def daemon_loop():
-    """主循环: 保持串口连接 + 消费队列 + 每秒刷新健康数据"""
+    """主循环: 串口 + 队列 + 消费健康线程数据"""
     import serial
 
     os.makedirs(QUEUE_DIR, exist_ok=True)
 
-    # 持久串口连接
     try:
         ser = serial.Serial(PORT, BAUD, timeout=2)
         ser.reset_input_buffer()
@@ -116,16 +131,31 @@ def daemon_loop():
         print(f"❌ Cannot open {PORT}: {e}")
         sys.exit(1)
 
-    last_health = 0
+    # 注册退出时关闭串口
+    def cleanup(*a):
+        try:
+            ser.close()
+        except Exception:
+            pass
+        sys.exit(0)
+    signal.signal(signal.SIGTERM, cleanup)
+    signal.signal(signal.SIGINT, signal.SIG_IGN)
+
+    # 启动健康采集线程 (独立线程，不阻塞主循环)
+    t = threading.Thread(target=health_collector, daemon=True)
+    t.start()
 
     while True:
         now = time.time()
 
-        # 每秒更新健康数据
-        if now - last_health >= 1.0:
-            cpu, mem = get_health()
+        # 消费健康线程的最新数据
+        global _health_cpu, _health_mem, _health_updated
+        if _health_updated:
+            with _health_lock:
+                cpu = _health_cpu
+                mem = _health_mem
+                _health_updated = False
             send_cmd(ser, {"cmd": "health", "cpu": cpu, "mem": mem})
-            last_health = now
 
         # 扫描 FIFO 队列
         for entry in sorted(glob.glob(os.path.join(QUEUE_DIR, "cmd_*"))):
@@ -175,9 +205,7 @@ def start_daemon():
 
     child_pid = os.fork()
     if child_pid == 0:
-        # 子进程
-        signal.signal(signal.SIGTERM, lambda *a: sys.exit(0))
-        signal.signal(signal.SIGINT, signal.SIG_IGN)
+        # 子进程 (信号处理在 daemon_loop 内注册)
         daemon_loop()
     else:
         write_pid(child_pid)
