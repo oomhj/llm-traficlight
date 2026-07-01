@@ -28,35 +28,37 @@
 #define SERIAL_BAUD   115200
 #define RX_BUFFER     512       // 接收缓冲区大小
 
-// ======================== 红绿灯绘图参数 ========================
+// ======================== 红绿灯绘图参数 (128×128) ========================
 #define SCR_W   128
-#define SCR_H   160
+#define SCR_H   128
 
-#define BODY_X      24
-#define BODY_Y      6
-#define BODY_W      80
-#define BODY_H      148
+// 红绿灯外壳 — 深灰色圆角矩形 (竖着)
+#define BODY_X      34
+#define BODY_Y      4
+#define BODY_W      60
+#define BODY_H      116
 #define BODY_R      6
 
+// 三个灯的中心坐标和半径
 #define LIGHT_CX    64
-#define LIGHT_R     15
-#define LIGHT_R1_Y  34
-#define LIGHT_R2_Y  78
-#define LIGHT_R3_Y  122
+#define LIGHT_R     11
+#define LIGHT_R1_Y  27      // 红灯
+#define LIGHT_R2_Y  64      // 黄灯
+#define LIGHT_R3_Y  101     // 绿灯
 
 // 颜色 (RGB565)
-#define COL_BG      0x5D2C
-#define COL_BODY    0x2104
-#define COL_BODY_EDGE 0x4208
-#define COL_DARK    0x3186
-#define COL_RED     0xF800
-#define COL_RED_GLOW  0xFAA0
-#define COL_YELLOW  0xFFE0
-#define COL_Y_GLOW  0xFEE0
-#define COL_GREEN   0x07E0
-#define COL_G_GLOW  0x87E0
-#define COL_HIGHLIGHT 0xFFFF
-#define COL_POLE    0x3186
+#define COL_BG      0x0000  // 黑色背景
+#define COL_BODY    0x2104   // 深灰
+#define COL_BODY_EDGE 0x4208 // 亮灰边
+#define COL_DARK    0x3186   // 未点亮时的暗色
+#define COL_RED     0xF800   // 红色
+#define COL_RED_GLOW  0xFAA0 // 红色辉光
+#define COL_YELLOW  0xFFE0   // 黄色
+#define COL_Y_GLOW  0xFEE0   // 黄色辉光
+#define COL_GREEN   0x07E0   // 绿色
+#define COL_G_GLOW  0x87E0   // 绿色辉光
+#define COL_HIGHLIGHT 0xFFFF // 高光白
+#define COL_POLE    0x2104   // 灯柱
 
 // ======================== 全局变量 ========================
 TFT_eSPI tft = TFT_eSPI();
@@ -78,8 +80,8 @@ unsigned long lastBlinkToggle = 0;
 
 // 序列(Pattern)相关
 bool patternActive = false;
-StaticJsonDocument<2048> patternSteps;
-int patternIndex = 0;
+JsonDocument patternSteps;
+size_t patternIndex = 0;
 unsigned long patternStepStartTime = 0;
 
 // ======================== TFT 绘图函数 ========================
@@ -103,18 +105,16 @@ void drawLightOn(int cx, int cy, int r, uint16_t color, uint16_t glowColor) {
 
 void drawHousing() {
     tft.fillScreen(COL_BG);
-    // 灯柱
-    tft.fillRect(56, BODY_Y + BODY_H - 2, 16, 8, COL_POLE);
     // 外壳
     tft.fillRoundRect(BODY_X, BODY_Y, BODY_W, BODY_H, BODY_R, COL_BODY);
     tft.drawRoundRect(BODY_X, BODY_Y, BODY_W, BODY_H, BODY_R, COL_BODY_EDGE);
-    // 遮阳帽
-    tft.fillRect(BODY_X - 4, BODY_Y - 3, BODY_W + 8, 6, COL_BODY);
-    tft.fillRoundRect(BODY_X - 4, BODY_Y - 5, BODY_W + 8, 8, 3, COL_BODY);
-    tft.drawRoundRect(BODY_X - 4, BODY_Y - 5, BODY_W + 8, 8, 3, COL_BODY_EDGE);
+    // 遮阳帽 (顶部凸出)
+    tft.fillRect(BODY_X - 3, BODY_Y - 3, BODY_W + 6, 5, COL_BODY);
+    tft.fillRoundRect(BODY_X - 3, BODY_Y - 5, BODY_W + 6, 7, 3, COL_BODY);
+    tft.drawRoundRect(BODY_X - 3, BODY_Y - 5, BODY_W + 6, 7, 3, COL_BODY_EDGE);
     // 底座
-    tft.fillRoundRect(BODY_X - 2, BODY_Y + BODY_H - 6, BODY_W + 4, 8, 3, COL_BODY);
-    tft.drawRoundRect(BODY_X - 2, BODY_Y + BODY_H - 6, BODY_W + 4, 8, 3, COL_BODY_EDGE);
+    tft.fillRoundRect(BODY_X - 1, BODY_Y + BODY_H - 4, BODY_W + 2, 6, 2, COL_BODY);
+    tft.drawRoundRect(BODY_X - 1, BODY_Y + BODY_H - 4, BODY_W + 2, 6, 2, COL_BODY_EDGE);
 }
 
 void drawTrafficLight(const String& color) {
@@ -146,11 +146,20 @@ void setBlinkLight(const String& color, bool on) {
 
 // ======================== 串口应答 ========================
 void sendResponse(const String& json) {
+    // 确保所有调试输出已发送完毕，避免和 JSON 响应混在一起
+    Serial.flush();
+    delay(1);
     Serial.println(json);
+    Serial.flush();
+}
+
+void sendLog(const String& msg) {
+    // 调试日志也通过 Serial 输出，但 Agent 的 Python CLI 会自动过滤掉非 JSON 行
+    Serial.println("[L] " + msg);
 }
 
 void sendStatus() {
-    StaticJsonDocument<256> doc;
+    JsonDocument doc;
     doc["status"] = "ok";
     doc["light"] = currentLight;
     doc["blinking"] = blinkingActive;
@@ -162,7 +171,7 @@ void sendStatus() {
 }
 
 void sendError(const String& msg) {
-    StaticJsonDocument<128> doc;
+    JsonDocument doc;
     doc["status"] = "error";
     doc["message"] = msg;
     String out;
@@ -178,7 +187,7 @@ void sendOk() {
 void processCommand(const String& line) {
     // 尝试 JSON 解析
     if (line.startsWith("{")) {
-        StaticJsonDocument<512> cmd;
+        JsonDocument cmd;
         DeserializationError err = deserializeJson(cmd, line);
         if (err) {
             sendError("Invalid JSON: " + String(err.c_str()));
@@ -229,9 +238,9 @@ void processCommand(const String& line) {
             drawTrafficLight("off");
             currentLight = "off";
 
-            Serial.printf("[CMD] blink %s ×%d @ %dms\n", v.c_str(), times, interval);
+            sendLog("blink " + v + " x" + String(times) + " @" + String(interval) + "ms");
 
-            StaticJsonDocument<128> res;
+            JsonDocument res;
             res["status"] = "ok";
             res["action"] = "blink";
             res["light"] = v;
@@ -263,9 +272,9 @@ void processCommand(const String& line) {
             drawTrafficLight("off");
             currentLight = "off";
 
-            Serial.printf("[CMD] pattern %d steps\n", steps.size());
+            sendLog("pattern " + String(steps.size()) + " steps");
 
-            StaticJsonDocument<128> res;
+            JsonDocument res;
             res["status"] = "ok";
             res["action"] = "pattern";
             res["steps"] = steps.size();
@@ -407,7 +416,7 @@ void updatePattern() {
         currentLight = tl;
         drawTrafficLight(tl);
         patternStepStartTime = now;
-        Serial.printf("[PATTERN] Step %d: %s for %dms\n", patternIndex, targetLight, duration);
+        Serial.printf("[PATTERN] Step %zu: %s for %lums\n", patternIndex, targetLight, duration);
     }
 
     if (now - patternStepStartTime >= duration) {
@@ -430,7 +439,7 @@ void setup() {
 
     // 初始化 TFT
     tft.init();
-    tft.setRotation(1);
+    tft.setRotation(2);
     tft.fillScreen(COL_BG);
     tft.setTextColor(0xFFFF, COL_BG);
     tft.setTextSize(1);
