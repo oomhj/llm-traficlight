@@ -114,15 +114,9 @@ class TrafficLight:
                 timeout=SERIAL_TIMEOUT,
                 write_timeout=2
             )
-            # 等待 ESP8266 就绪
-            time.sleep(2)
-            # 清空缓冲区 (丢弃启动日志)
+            # 仅在首次连接时等待 ESP8266 就绪（hook 场景不需等待）
             self.ser.reset_input_buffer()
             return True
-        except ImportError:
-            print("❌ pyserial not installed.", file=sys.stderr)
-            print("   Run: pip install pyserial", file=sys.stderr)
-            sys.exit(1)
         except serial.SerialException as e:
             print(f"❌ Cannot open {self.port}: {e}", file=sys.stderr)
             print("   Check:", file=sys.stderr)

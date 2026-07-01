@@ -1,6 +1,6 @@
 #!/bin/bash
 # traflight-hook.sh — Claude Code hook 脚本
-# 自动在命令执行前后控制红绿灯
+# 通过守护进程控制红绿灯，避免串口并发冲突
 #
 # 用法:
 #   PreToolUse[Bash]:           bash traflight-hook.sh before
@@ -8,22 +8,13 @@
 #   PostToolUseFailure[Bash]:   bash traflight-hook.sh failure
 
 DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-CLI="$DIR/traflight.py"
-PORT="/dev/cu.usbserial-210"
+DAEMON="$DIR/traflight-daemon.sh"
 
-# 静默执行，不输出任何内容到终端
-run_traflight() {
-    python3 "$CLI" --port "$PORT" "$@" >/dev/null 2>&1
-}
+# 确保守护进程在运行
+"$DAEMON" start 2>/dev/null
 
 case "$1" in
-    before)
-        run_traflight yellow
-        ;;
-    success)
-        run_traflight green
-        ;;
-    failure)
-        run_traflight blink red -n 3
-        ;;
+    before)  "$DAEMON" before  >/dev/null 2>&1 ;;
+    success) "$DAEMON" success >/dev/null 2>&1 ;;
+    failure) "$DAEMON" failure >/dev/null 2>&1 ;;
 esac
