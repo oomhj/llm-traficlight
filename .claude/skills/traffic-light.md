@@ -17,7 +17,8 @@ description: >
 开始 → 🟡 黄灯  (PreToolUse auto)
 完成 → 🟢 绿灯  (PostToolUse auto)
 失败 → 🔴 闪烁  (PostToolUseFailure auto)
-需要输入 → 🔴 红灯  (manual)
+需要输入 → 🔴 红灯  (手动 `traflight red` — 必须主动调用)
+通知 →    🔴 红灯  (Notification auto)
 ```
 
 ## Quick Reference
