@@ -212,9 +212,9 @@ int lightX(const String& color) {
     return -1;
 }
 
-void setLight(const String& color) {
-    if (blinkingActive || patternActive) return;
-    if (currentLight == color) return;
+bool setLight(const String& color) {
+    if (blinkingActive || patternActive) return false;
+    if (currentLight == color) return true;
 
     int prevX = lightX(currentLight);
     if (prevX > 0) {
@@ -227,6 +227,7 @@ void setLight(const String& color) {
     else if (color == "green")  drawLightOn(TL_GREEN_X, TL_CY, TL_R, COL_GREEN, COL_G_GLOW);
 
     currentLight = color;
+    return true;
 }
 
 void setBlinkLight(const String& color, bool on) {
@@ -491,14 +492,17 @@ void updatePattern() {
     const char* targetLight = step[0];
     unsigned long duration = step[1].as<unsigned long>();
     if (patternStepStartTime == 0) {
+        unsigned long transStart = millis();
         String tl = String(targetLight);
+        patternActive = false;     // 放行 setLight
         setLight(tl);
-        patternStepStartTime = now;
-        Serial.printf("[PATTERN] Step %zu: %s for %lums\n", patternIndex, targetLight, duration);
+        patternActive = true;      // 恢复
+        patternStepStartTime = millis();
+        patternDrift = patternStepStartTime - transStart;
+        if (patternDrift > duration) patternDrift = duration;
+        Serial.printf("[PATTERN] Step %zu: %s for %lums (drift %lums)\n", patternIndex, targetLight, duration, patternDrift);
     }
     if (now - patternStepStartTime >= duration - patternDrift) {
-        patternDrift = millis() - now;
-        if (patternDrift > duration) patternDrift = 0;
         patternIndex++;
         patternStepStartTime = 0;
     }

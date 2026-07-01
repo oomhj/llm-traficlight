@@ -24,10 +24,22 @@ import time
 import glob
 import threading
 
-PORT = "/dev/cu.usbserial-210"
 BAUD = 115200
 QUEUE_DIR = "/tmp/traflight-queue"
 PIDFILE = "/tmp/traflight-daemon.pid"
+
+def find_port():
+    """自动发现串口设备"""
+    import glob
+    patterns = ["/dev/ttyUSB*", "/dev/ttyACM*", "/dev/cu.usbserial*",
+                "/dev/cu.usbmodem*", "/dev/cu.wchusbserial*"]
+    for p in patterns:
+        ports = sorted(glob.glob(p))
+        if ports:
+            return ports[0]
+    return "/dev/cu.usbserial-210"  # fallback
+
+PORT = find_port()
 
 
 def parse_cmd(cmd_str):
