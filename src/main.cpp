@@ -32,19 +32,19 @@
 #define SCR_W   128
 #define SCR_H   128
 
-// 红绿灯外壳 — 深灰色圆角矩形 (竖着)
-#define BODY_X      34
+// 红绿灯外壳 — 深灰色大圆角矩形 (竖着)
+#define BODY_X      29
 #define BODY_Y      4
-#define BODY_W      60
+#define BODY_W      70
 #define BODY_H      116
-#define BODY_R      6
+#define BODY_R      8       // 大圆角
 
-// 三个灯的中心坐标和半径
+// 三个灯的中心坐标和半径 (加大直径)
 #define LIGHT_CX    64
-#define LIGHT_R     11
-#define LIGHT_R1_Y  27      // 红灯
-#define LIGHT_R2_Y  64      // 黄灯
-#define LIGHT_R3_Y  101     // 绿灯
+#define LIGHT_R     14      // 半径 14 → 直径 28
+#define LIGHT_R1_Y  24      // 红灯
+#define LIGHT_R2_Y  62      // 黄灯
+#define LIGHT_R3_Y  100     // 绿灯
 
 // 颜色 (RGB565)
 #define COL_BG      0x0000  // 黑色背景
@@ -105,16 +105,9 @@ void drawLightOn(int cx, int cy, int r, uint16_t color, uint16_t glowColor) {
 
 void drawHousing() {
     tft.fillScreen(COL_BG);
-    // 外壳
+    // 外壳 — 仅纯圆角矩形，无上下装饰
     tft.fillRoundRect(BODY_X, BODY_Y, BODY_W, BODY_H, BODY_R, COL_BODY);
     tft.drawRoundRect(BODY_X, BODY_Y, BODY_W, BODY_H, BODY_R, COL_BODY_EDGE);
-    // 遮阳帽 (顶部凸出)
-    tft.fillRect(BODY_X - 3, BODY_Y - 3, BODY_W + 6, 5, COL_BODY);
-    tft.fillRoundRect(BODY_X - 3, BODY_Y - 5, BODY_W + 6, 7, 3, COL_BODY);
-    tft.drawRoundRect(BODY_X - 3, BODY_Y - 5, BODY_W + 6, 7, 3, COL_BODY_EDGE);
-    // 底座
-    tft.fillRoundRect(BODY_X - 1, BODY_Y + BODY_H - 4, BODY_W + 2, 6, 2, COL_BODY);
-    tft.drawRoundRect(BODY_X - 1, BODY_Y + BODY_H - 4, BODY_W + 2, 6, 2, COL_BODY_EDGE);
 }
 
 void drawTrafficLight(const String& color) {
