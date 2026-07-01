@@ -14,20 +14,23 @@
 │  Agent 层 (AI Agent)                                                │
 │  ┌─────────┐  ┌──────────┐  ┌───────────┐                          │
 │  │ Claude   │  │ Python   │  │ 任何 LLM  │                          │
-│  │ (MCP)    │  │ 脚本     │  │ Agent     │                          │
+│  │ (Code)   │  │ 脚本     │  │ Agent     │                          │
 │  └────┬─────┘  └────┬─────┘  └─────┬─────┘                          │
 │       │             │              │                                │
 │       └─────────────┼──────────────┘                                │
 │                     │ 命令行调用                                     │
 │                     │ traflight red / traflight blink ...           │
 ├─────────────────────┼───────────────────────────────────────────────┤
-│  桥接层 (Python CLI) │                                              │
+│  桥接层 (Python CLI + Auto Hooks)                                  │
 │  ┌──────────────────▼────────────────────────────────────────────┐  │
-│  │  traflight.py                                                 │  │
-│  │  ┌───────────┐ ┌──────────┐ ┌─────────┐ ┌───────────────┐   │  │
-│  │  │ 串口发现   │ │ 命令解析  │ │ 协议封装 │ │ 自动重试/恢复 │   │  │
-│  │  └───────────┘ └──────────┘ └─────────┘ └───────────────┘   │  │
-│  └──────────────────────────────┬───────────────────────────────┘  │
+│  │  traflight.py                   traflight-hook.sh              │  │
+│  │  ┌───────────┐ ┌──────────┐    ┌──────────────┐               │  │
+│  │  │ 串口发现   │ │ 命令解析  │    │ PreToolUse   │               │  │
+│  │  │ JSON 封装  │ │ 响应解析  │    │ PostToolUse  │               │  │
+│  │  │ 错误重试   │ │ CLI 解析  │    │ PostToolUse- │               │  │
+│  │  └───────────┘ └──────────┘    │ Failure      │               │  │
+│  │                                └──────────────┘               │  │
+│  └──────────────────────────────┬────────────────────────────────┘  │
 ├─────────────────────────────────┼──────────────────────────────────┤
 │  通信层 (USB 串口)              │                                  │
 │                      ┌──────────▼──────────┐                      │
@@ -40,12 +43,12 @@
 │  │  ESP8266 NodeMCU                                            │  │
 │  │  ┌──────────────┐  ┌────────────────┐  ┌───────────────┐   │  │
 │  │  │ 串口接收器    │→│ JSON 命令解析器  │→│ 灯光状态机     │   │  │
-│  │  │ (RX 中断)     │  │ (ArduinoJson)  │  │ (set/blink/   │   │  │
+│  │  │ (RX 缓冲)     │  │ (ArduinoJson)  │  │ (set/blink/   │   │  │
 │  │  └──────────────┘  └────────────────┘  │  pattern)     │   │  │
 │  │                                        └───────┬───────┘   │  │
 │  │  ┌────────────────┐  ┌────────────────┐        │           │  │
 │  │  │ TFT_eSPI 绘制   │←│ 状态查询        │←───────┘           │  │
-│  │  │ ST7735 128x160 │  │ /status        │                    │  │
+│  │  │ ST7735 128×128 │  │ /status        │                    │  │
 │  │  └────────────────┘  └────────────────┘                    │  │
 │  └────────────────────────────────────────────────────────────┘  │
 └─────────────────────────────────────────────────────────────────────┘
@@ -56,68 +59,98 @@
 | 层级 | 技术栈 | 职责 |
 |------|--------|------|
 | **Agent 层** | Claude / Python / 任意 LLM | 发出控制指令，接收状态反馈 |
-| **桥接层** | Python 3 + pyserial | 封装串口操作，自动发现设备，提供友好 CLI |
+| **桥接层** | Python 3 + pyserial + bash | 封装串口操作，自动发现设备，提供友好 CLI；通过 Claude Code hooks 自动触发 |
 | **通信层** | USB 串口 (115200 8N1) | 物理传输 JSON 命令和响应 |
 | **硬件层** | ESP8266 + TFT_eSPI | 接收指令、控制 TFT 显示、执行闪烁/序列 |
 
 ---
 
-## 2. 硬件设计
+## 2. Agent 状态约定
 
-### 2.1 元器件清单
+红绿灯作为 Agent 的**物理状态指示器**：
+
+| 状态 | 灯光 | 触发方式 | 时机 |
+|------|------|---------|------|
+| **Working** | 🟡 **黄灯** | Auto hook `PreToolUse[Bash]` | Agent 执行任何命令前 |
+| **Done** | 🟢 **绿灯** | Auto hook `PostToolUse[Bash]` | 命令成功完成后 |
+| **Need Input** | 🔴 **红灯** | 手动 `traflight red` | Agent 需要用户决策时 |
+| **Error** | 🔴 **闪烁** | Auto hook `PostToolUseFailure` | 命令执行失败时 |
+
+### 状态机
+
+```
+                  ┌────────────────────────────────────┐
+                  │  Claude Code Auto Hooks            │
+                  │  PreToolUse  → 🟡 yellow            │
+                  │  PostToolUse → 🟢 green             │
+                  │  PostToolUseFailure → 🔴 blink red  │
+                  └────────────────────────────────────┘
+
+  用户发消息 ──→ 🟡 Working ──→ 🟢 Done ──→ 等待下一消息
+                      │
+                      ├──→ (失败) → 🔴 blink red
+                      │
+                      └──→ (需要确认) → 🔴 red → 🟢 Done
+```
+
+---
+
+## 3. 硬件设计
+
+### 3.1 元器件清单
 
 | 组件 | 型号 | 数量 | 作用 |
 |------|------|------|------|
-| 主控 | ESP8266 NodeMCU v3 | 1 | WiFi SoC，接收串口指令 |
-| 屏幕 | ST7735 1.8" TFT (128x160) | 1 | 显示红绿灯图形 |
+| 主控 | ESP8266 NodeMCU v3 | 1 | 接收串口指令 |
+| 屏幕 | ST7735 1.8" TFT (128×128) | 1 | 显示红绿灯图形 |
 | 线材 | 母对母杜邦线 | 8 根 | 连接屏幕和主控 |
 | 电源 | USB 数据线 (Micro-B) | 1 | 供电 + 串口通信 |
 
-### 2.2 接线表
+### 3.2 接线表
 
-| ST7735 引脚 | ESP8266 引脚 | SPI 功能 |
-|-------------|-------------|----------|
+| ST7735 引脚 | ESP8266 引脚 | 说明 |
+|-------------|-------------|------|
 | VCC | 3.3V | 电源 |
 | GND | GND | 地线 |
-| CS | D2 (GPIO4) | SPI 片选 |
-| DC | D1 (GPIO5) | 数据/命令选择 |
+| CS | GND | 片选直连 GND (软件禁用) |
+| DC | D3 (GPIO0) | 数据/命令选择 |
 | RST | D4 (GPIO2) | 复位 |
-| MOSI | D7 (GPIO13) | **硬件 SPI 主机输出** |
+| MOSI | D7 (GPIO13) | **硬件 SPI MOSI** |
 | SCLK | D5 (GPIO14) | **硬件 SPI 时钟** |
-| BL | 3.3V | 背光 (常亮) |
+| BL (LEDA) | D0 (GPIO5) | 背光控制 (HIGH=亮) |
+| LEDK | GND | 背光负极 |
 
 > **约束:** MOSI 和 SCLK 必须接 ESP8266 的硬件 SPI 引脚 (GPIO13/GPIO14)，不可更改。
 
-### 2.3 屏幕显示设计
+### 3.3 屏幕显示设计
 
-ST7735 128x160 竖屏布局：
+ST7735 128×128 竖屏布局：
 
 ```
-┌──── 屏幕 128x160 ────┐
+┌──── 屏幕 128×128 ────┐
 │                        │
-│  ┌────────────────┐    │  ← 深灰色圆角外壳
-│  │                │    │     BODY_X=24, BODY_Y=6
-│  │    🔴 红灯      │    │     w=80,  h=148
-│  │    (r=15)      │    │
-│  │                │    │     红: cx=64, cy=34
-│  │    🟡 黄灯      │    │     黄: cx=64, cy=78
-│  │    (r=15)      │    │     绿: cx=64, cy=122
+│  ┌────────────────┐    │  ← 深灰圆角外壳 (r=8)
+│  │                │    │     BODY_X=29, BODY_Y=4
+│  │    🔴 红灯      │    │     W=70, H=116
+│  │    (r=14)      │    │
+│  │                │    │     红: cx=64, cy=24
+│  │    🟡 黄灯      │    │     黄: cx=64, cy=62
+│  │    (r=14)      │    │     绿: cx=64, cy=100
 │  │                │    │
 │  │    🟢 绿灯      │    │     点亮: 主色 + 辉光 + 高光
-│  │    (r=15)      │    │     熄灭: 深灰色 + 内凹阴影
+│  │    (r=14)      │    │     熄灭: 深灰 + 内凹阴影
 │  │                │    │
 │  └────────────────┘    │
-│       ██ 灯柱          │  ← 灯柱底部
 │                        │
-│   背景: 柔和天空蓝     │
+│   背景: 黑色 (0x0000)  │
 └────────────────────────┘
 ```
 
 ---
 
-## 3. 串口通信协议
+## 4. 串口通信协议
 
-### 3.1 基本参数
+### 4.1 基本参数
 
 | 参数 | 值 |
 |------|-----|
@@ -126,101 +159,48 @@ ST7735 128x160 竖屏布局：
 | 校验 | 无 |
 | 停止位 | 1 |
 | 流控 | 无 |
-| 编码 | UTF-8 |
 | 帧格式 | 单行 JSON + `\n` |
 
-### 3.2 协议状态图
-
-```
-┌──────────┐
-│  IDLE     │ ←───────── off / pattern 结束 / blink 结束
-└─────┬─────┘
-      │ {"cmd":"light","value":"red"}
-      ↓
-┌──────────┐   5s后自动    ┌───────────┐
-│  RED      │ ──────────→  │ GREEN      │
-└──────────┘              └─────────────┘
-      ↑                          │
-      │  2s后自动                │ {"cmd":"light","value":"yellow"}
-      │                          ↓
-      │                    ┌───────────┐
-      └───────────────────│  YELLOW    │
-                          └───────────┘
-
-Blink 状态:
-  IDLE → {"cmd":"blink","value":"red","times":3}
-       → RED(亮300ms) → OFF(灭300ms) → RED → OFF → RED → OFF → IDLE
-
-Pattern 状态:
-  IDLE → {"cmd":"pattern","steps":[["red",3000],["green",3000]]}
-       → RED(3s) → GREEN(3s) → IDLE
-```
-
-### 3.3 命令列表
+### 4.2 命令列表
 
 #### `light` — 设置灯光
-
-最简单的操作，立即将红绿灯切换到指定颜色。
 
 ```json
 {"cmd":"light","value":"red"}
 ```
 
-| 字段 | 类型 | 必填 | 可选值 |
-|------|------|------|--------|
-| cmd | string | ✓ | `light` |
-| value | string | ✓ | `red` / `yellow` / `green` / `off` |
+| value | 效果 |
+|-------|------|
+| `red` | 🔴 红灯亮 (带红光辉光) |
+| `yellow` | 🟡 黄灯亮 (带黄光辉光) |
+| `green` | 🟢 绿灯亮 (带绿光辉光) |
+| `off` | 全灭 |
 
-**响应：**
-```json
-{"status":"ok","light":"red"}
-```
-
-**行为：** 停止当前 blink/pattern，立即切换。
+**响应:** `{"status":"ok","light":"red"}`
 
 ---
 
 #### `blink` — 闪烁
 
-让指定灯闪烁指定次数，ESP8266 本地控制时序。
-
 ```json
 {"cmd":"blink","value":"red","times":5,"interval":300}
 ```
 
-| 字段 | 类型 | 必填 | 可选值 | 默认值 |
-|------|------|------|--------|--------|
-| cmd | string | ✓ | `blink` | — |
-| value | string | ✓ | `red` / `yellow` / `green` | — |
-| times | int | ✗ | 1–100 | 3 |
-| interval | int | ✗ | 50–5000 (ms) | 500 |
-
-**响应：**
-```json
-{"status":"ok","action":"blink","light":"red","times":5,"interval_ms":300}
-```
+| 参数 | 类型 | 默认值 | 说明 |
+|------|------|--------|------|
+| value | string | — | 灯色 (red/yellow/green) |
+| times | int | 3 | 闪烁次数 |
+| interval | int | 500 | 间隔(毫秒) |
 
 ---
 
 #### `pattern` — 灯光序列
 
-按顺序执行一系列灯色 + 持续时间，每个步骤自动切换。
-
 ```json
-{"cmd":"pattern","steps":[["red",3000],["green",5000],["yellow",1000],["off",500]]}
+{"cmd":"pattern","steps":[["red",3000],["green",5000],["off",500]]}
 ```
 
-| 字段 | 类型 | 必填 | 约束 |
-|------|------|------|------|
-| cmd | string | ✓ | `pattern` |
-| steps | array | ✓ | 最多 50 步 |
-
-每个 step: `["灯色", 持续时间(ms)]`，灯色取值同 `value`。
-
-**响应：**
-```json
-{"status":"ok","action":"pattern","steps":4}
-```
+每个 step 为 `[灯色, 持续时间ms]`，最多 50 步。
 
 ---
 
@@ -230,248 +210,149 @@ Pattern 状态:
 {"cmd":"status"}
 ```
 
-**响应：**
-```json
-{"status":"ok","light":"red","blinking":false,"pattern_active":false,"uptime_ms":1234567}
-```
+**响应:** `{"status":"ok","light":"red","blinking":false,"pattern_active":false,"uptime_ms":1234567}`
 
-| 响应字段 | 类型 | 说明 |
-|---------|------|------|
-| light | string | 当前灯色 |
-| blinking | bool | 是否正在闪烁 |
-| pattern_active | bool | 是否正在执行序列 |
-| uptime_ms | uint | 设备启动以来的毫秒数 |
+### 4.3 文本快捷命令
+
+为方便串口监视器调试，同时支持纯文本命令：
+`red` / `yellow` / `green` / `off` / `status` / `help`
 
 ---
 
-#### `help` — 帮助
+## 5. 自动 Hooks 系统
+
+Claude Code 通过 `~/.claude/settings.json` 配置 hooks，自动触发红绿灯：
 
 ```json
-{"cmd":"help"}
+{
+  "hooks": {
+    "PreToolUse": [
+      { "matcher": "Bash(*)", "hooks": [
+          {"type":"command", "command":"bash traflight-hook.sh before",
+           "async": true, "timeout": 5}
+      ]}
+    ],
+    "PostToolUse": [
+      { "matcher": "Bash(*)", "hooks": [
+          {"type":"command", "command":"bash traflight-hook.sh success",
+           "async": true, "timeout": 5}
+      ]}
+    ],
+    "PostToolUseFailure": [
+      { "matcher": "Bash(*)", "hooks": [
+          {"type":"command", "command":"bash traflight-hook.sh failure",
+           "async": true, "timeout": 5}
+      ]}
+    ]
+  }
+}
 ```
 
-在串口打印帮助文本，并返回确认 JSON。
-
----
-
-### 3.4 错误处理
-
-| 错误场景 | 响应 |
-|---------|------|
-| JSON 格式错误 | `{"status":"error","message":"Invalid JSON: ..."}` |
-| 缺少 cmd 字段 | `{"status":"error","message":"Missing 'cmd' field"}` |
-| 命令不存在 | `{"status":"error","message":"Unknown command: xxx"}` |
-| light 值无效 | `{"status":"error","message":"Invalid value: red/yellow/green/off"}` |
-| 命令过长 | `{"status":"error","message":"Command too long"}` (>512字节) |
-| pattern 步数过多 | `{"status":"error","message":"Too many steps (max 50)"}` |
-
----
-
-## 4. 桥接层设计 (traflight CLI)
-
-### 4.1 设计目标
-
-- Agent 只需执行 `traflight red`，无需手写 serial 代码
-- 自动发现串口设备，无需人工指定端口号
-- 统一的退出码和错误信息，Agent 可以判断是否成功
-
-### 4.2 CLI 接口一览
-
-```
-Usage: traflight <command> [options]
-
-Commands:
-  red                 亮红灯
-  yellow              亮黄灯
-  green               亮绿灯
-  off                 关闭所有灯
-  status              查询状态
-  blink <color>       闪烁指定灯
-    [-n, --times N]   闪烁次数 (默认: 3)
-    [-i, --interval]  间隔毫秒 (默认: 500)
-  pattern <steps>     灯光序列 "red:3,green:5,yellow:1"
-  cycle               标准红绿灯周期 (绿5s → 黄2s → 红5s)
-  port                显示当前串口设备
-  scan                扫描可用串口
-  help                显示帮助
-```
-
-### 4.3 Agent 调用示例
+安装方式:
 
 ```bash
-# 简单控制
-traflight green
-traflight yellow
-traflight red
-traflight off
-
-# 闪烁
-traflight blink red -n 5 -i 300
-
-# 序列 (用逗号分隔的 "灯色:秒数" 格式)
-traflight pattern "red:2,green:3,yellow:1"
-
-# 标准周期
-traflight cycle
-
-# 查询
-traflight status
-```
-
----
-
-## 5. 场景流程
-
-### 5.1 标准红绿灯周期
-
-```
-Agent                          traflight                     ESP8266
-  │                               │                            │
-  │──traflight cycle─────────────→│                            │
-  │                               │──{"cmd":"light","value":"green"}──→│
-  │                               │←──{"status":"ok","light":"green"}──│
-  │                               │   (等待 5 秒)              │
-  │                               │──{"cmd":"light","value":"yellow"}─→│
-  │                               │←──{"status":"ok","light":"yellow"}─│
-  │                               │   (等待 2 秒)              │
-  │                               │──{"cmd":"light","value":"red"}───→│
-  │                               │←──{"status":"ok","light":"red"}───│
-  │                               │   (等待 5 秒)              │
-  │←──cycle complete─────────────│                            │
-```
-
-### 5.2 闪烁警示
-
-```
-Agent                          traflight                     ESP8266
-  │                               │                            │
-  │──traflight blink red 3 300───→│                            │
-  │                               │──{"cmd":"blink","value":"red",│
-  │                               │   "times":3,"interval":300}──→│
-  │                               │←──{"status":"ok","action":"blink"}│
-  │                               │   红 → 灭 → 红 → 灭 → 红 → 灭  │
-  │←──blink complete─────────────│                            │
+python3 scripts/install-hooks.py
 ```
 
 ---
 
 ## 6. ESP8266 固件设计
 
-### 6.1 文件结构
-
-| 文件 | 作用 |
-|------|------|
-| `src/main.cpp` | 主程序：串口读取、命令解析、TFT 绘制、状态管理 |
-| `User_Setup_ST7735.h` | TFT_eSPI 库的屏幕引脚配置 |
-
-### 6.2 程序结构
+### 6.1 程序结构
 
 ```
 main.cpp
 ├── setup()
 │   ├── Serial.begin(115200)
-│   ├── tft.init()
+│   ├── tft.init() + setRotation(0)
 │   ├── self-test (红→黄→绿自检动画)
 │   └── 打印启动信息
 │
 └── loop()
-    ├── readSerial()          ← 非阻塞读取串口
-    │   ├── 逐字符读取
-    │   ├── 遇到 '\n' 触发 processCommand()
-    │   └── 缓冲区溢出保护
+    ├── readSerial()            ← 非阻塞读取串口
+    │   ├── 逐字符读取至 \n
+    │   └── 触发 processCommand()
     │
-    ├── processCommand()      ← 命令解析
-    │   ├── JSON 解析 (ArduinoJson)
+    ├── processCommand()        ← JSON / 文本命令解析
     │   ├── light → setLight() + sendResponse()
-    │   ├── blink → 启动闪烁状态机 + sendResponse()
-    │   ├── pattern → 启动序列状态机 + sendResponse()
+    │   ├── blink → 启动闪烁状态机
+    │   ├── pattern → 启动序列状态机
     │   └── status → sendStatus()
     │
-    ├── updateBlink()         ← 闪烁状态机 (非阻塞)
-    │   └── 基于 millis() 定时切换亮/灭
-    │
-    └── updatePattern()       ← 序列状态机 (非阻塞)
-        └── 基于 millis() 逐步骤切换
+    ├── updateBlink()           ← 闪烁状态机 (millis)
+    └── updatePattern()         ← 序列状态机 (millis)
 ```
 
-### 6.3 状态变量
+### 6.2 关键设计
 
-```cpp
-String currentLight;       // 当前灯色 (off/red/yellow/green)
-bool blinkingActive;        // 是否正在闪烁
-int blinkRemaining;         // 剩余闪烁次数
-bool patternActive;         // 是否正在执行序列
-int patternIndex;           // 当前执行到第几步
-```
-
-### 6.4 核心约束
-
-- **串口读取 + TFT 绘制不能阻塞**：所有时序控制基于 `millis()` 非阻塞定时
-- **Pattern/Blink 优先于 Light**：正在闪烁/序列时，`light` 命令被忽略
-- **缓冲区保护**：接收缓冲区 512 字节，溢出时丢弃整条命令
+- **串口响应纯净**: `sendResponse()` 先 `Serial.flush()` 再 `println(json)`，不混入调试日志
+- **非阻塞**: 所有时序基于 `millis()`，不阻塞串口读取
+- **CO_ BGR 色彩**: 配置 `TFT_RGB_ORDER TFT_BGR` 适配 ST7735
+- **缓冲区保护**: 512 字节接收缓冲区，溢出时丢弃并重置
 
 ---
 
-## 7. 配置与部署
+## 7. 项目文件结构
 
-### 7.1 编译烧录
-
-```bash
-# 一键编译烧录
-pio run --target upload
-
-# 查看串口日志 (Linux/Mac)
-pio device monitor
+```
+llm-traficlight/
+├── .claude/
+│   ├── settings.local.json         ← 项目权限配置
+│   └── skills/traffic-light.md     ← Skill 定义
+├── scripts/
+│   └── install-hooks.py            ← Auto hooks 安装脚本
+├── src/
+│   └── main.cpp                    ← ESP8266 固件
+├── traflight.py                    ← Python CLI 桥接层
+├── traflight-hook.sh               ← Claude Code hook 脚本
+├── User_Setup_ST7735.h             ← TFT 引脚配置 (用户自定义)
+├── platformio.ini                  ← PlatformIO 编译配置
+├── setup.py                        ← Python 包安装
+├── requirements.txt                ← Python 依赖
+├── CLAUDE.md                       ← 项目规则 (红绿灯强制使用)
+├── docs/DESIGN.md                  ← 本文档
+└── README.md
 ```
 
-### 7.2 安装 Python CLI
+---
+
+## 8. 部署与使用
+
+### 编译烧录
 
 ```bash
-# 安装依赖
+pio run --target upload
+```
+
+### 安装 Python CLI
+
+```bash
 pip install pyserial
-
-# 设置别名
-alias traflight='python3 /path/to/traflight.py'
+pip install -e .          # 可选: 安装 traflight 命令到 PATH
 ```
 
-### 7.3 快速验证
+### 安装 Auto Hooks
 
 ```bash
-# 1. 烧录固件
-pio run --target upload
+python3 scripts/install-hooks.py
+```
 
-# 2. 打开串口监视器测试
-pio device monitor
-#   输入 help 查看帮助
-#   输入 red / yellow / green 测试显示
+### Agent 状态指示
 
-# 3. 退出监视器，用 CLI 控制
-traflight red
-traflight blink green -n 5
-traflight status
+```bash
+traflight yellow    # 🟡 开始工作
+traflight green     # 🟢 完成
+traflight red       # 🔴 需要输入
 ```
 
 ---
 
-## 8. 扩展可能性
+## 9. 扩展可能性
 
 | 方向 | 方案 | 改动量 |
 |------|------|--------|
-| **+ 物理 LED** | TFT 显示同时，GPIO 也驱动 LED | 小 (改固件 + 加硬件) |
-| **+ 声音** | 增加蜂鸣器，pattern 可带 beep | 小 |
-| **+ 传感器** | 加按钮/光敏，Agent 可读取环境 | 中 |
-| **+ MCP Server** | 封装为 MCP tool，Claude 原生调用 | 中 (加一层 Python) |
-| **+ 无线** | 在 Python 桥接层上扩展 TCP/WebSocket | 小 (不改固件) |
-
----
-
-## 9. 设计决策记录
-
-| 决策 | 选项 | 选择 | 理由 |
-|------|------|------|------|
-| 通信方式 | WiFi HTTP / 串口 | **串口** | 简化硬件，无需网络配置 |
-| 命令格式 | 二进制 / 文本 / JSON | **JSON** | Agent 天然擅长 JSON |
-| 时序控制 | Agent 侧 / 硬件侧 | **硬件侧** | 避免 Agent 网络延迟影响时序 |
-| 显示方式 | LED / TFT | **TFT** | 显示效果好，接线简单 |
-| Agent 接口 | 直接串口 / Python CLI | **两者** | CLI 方便 Agent，直接串口方便调试 |
-| 文本命令 | 支持 / 不支持 | **支持** | 方便人工调试 |
+| **背光 PWM** | `analogWrite(TFT_BL, brightness)` | 中 (固件 + 协议) |
+| **渐变过渡** | fade 动画切换灯色 | 中 (固件) |
+| **MCP Server** | 桥接串口到 Claude Desktop | 中 (Python 层) |
+| **更多显示模式** | 文字、进度条、动画 | 大 (固件 + 协议) |
+| **蜂鸣器** | GPIO 输出音频反馈 | 小 (固件 + 硬件) |
