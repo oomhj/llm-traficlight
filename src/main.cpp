@@ -29,29 +29,29 @@
 
 // ======================== UI 布局 (128×128) ========================
 
-// 横向红绿灯 (加大面积)
-#define TL_BODY_X      10
-#define TL_BODY_Y      1
-#define TL_BODY_W      108
-#define TL_BODY_H      46
-#define TL_BODY_R      6
+// 横向红绿灯 (长边撑满 128)
+#define TL_BODY_X      2
+#define TL_BODY_Y      4
+#define TL_BODY_W      124
+#define TL_BODY_H      76
+#define TL_BODY_R      8
 
-#define TL_CY          24          // 灯中心 Y
-#define TL_R           13          // 灯半径 (加大)
-#define TL_RED_X       31          // 红灯 X
+#define TL_CY          42          // 灯中心 Y
+#define TL_R           16          // 灯半径
+#define TL_RED_X       22          // 红灯 X
 #define TL_YELLOW_X    64          // 黄灯 X
-#define TL_GREEN_X     97          // 绿灯 X
+#define TL_GREEN_X     106         // 绿灯 X
 
-// CPU / MEM 一行布局: 标题 | 10格条形图 | 百分比
-#define ROW1_Y         52          // CPU 行 Y
-#define ROW2_Y         63          // MEM 行 Y
+// CPU / MEM 一行布局: 标题 | 20格条形图 | 百分比
+#define ROW1_Y         85          // CPU 行 Y
+#define ROW2_Y         95          // MEM 行 Y
 #define ROW_LABEL_X    2           // "CPU"/"MEM" 标题 X
-#define ROW_BAR_X      20          // 条形图起始 X
-#define ROW_BAR_W      7           // 每格宽度
-#define ROW_BAR_H      7           // 每格高度
+#define ROW_BAR_X      16          // 条形图起始 X
+#define ROW_BAR_W      3           // 每格宽度
+#define ROW_BAR_H      6           // 每格高度
 #define ROW_BAR_GAP    1           // 格间距
-#define ROW_VALUE_X    108         // 百分比数值 X
-#define BAR_COUNT      10          // 格子数
+#define ROW_VALUE_X    102         // 百分比数值 X
+#define BAR_COUNT      20          // 格子数 (每格 5%)
 
 // 颜色
 #define COL_BG        0x0000   // 黑色背景
