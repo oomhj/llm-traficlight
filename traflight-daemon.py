@@ -106,6 +106,8 @@ def health_collector():
     try:
         import psutil
     except ImportError:
+        print("[DAEMON] ⚠️ psutil not installed — health bars will show 0%")
+        print("[DAEMON]    Run: pip install psutil")
         return
 
     global _health_cpu, _health_mem, _health_updated
