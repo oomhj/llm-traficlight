@@ -166,7 +166,6 @@ void setLight(const String& color) {
     if (currentLight == color) return;
 
     int prevCy = lightCy(currentLight);
-    int newCy  = lightCy(color);
 
     // 熄灭前一个灯 (清除辉光 + 画暗灯)
     if (prevCy > 0) {
