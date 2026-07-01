@@ -3,11 +3,14 @@
 traflight-daemon.py — 常驻串口守护进程 (Python)
 
 保持串口持续连接，通过 FIFO 队列接收命令，毫秒级响应。
+每秒自动采集 CPU/内存使用率并更新显示。
+
 所有 traflight / health / hooks 命令一律走队列，统一管理串口。
 
 用法:
     python3 traflight-daemon.py start         启动后台守护进程
     python3 traflight-daemon.py stop          停止
+    python3 traflight-daemon.py restart       重启
     python3 traflight-daemon.py status        查看状态
     python3 traflight-daemon.py send <cmd>    发送命令到队列
     python3 traflight-daemon.py run           前台运行 (调试用)
@@ -90,8 +93,17 @@ def send_cmd(ser, cmd_dict):
         ser.readline()
 
 
+def get_health():
+    """采集 CPU/内存使用率"""
+    try:
+        import psutil
+        return int(psutil.cpu_percent(interval=0)), int(psutil.virtual_memory().percent)
+    except Exception:
+        return 0, 0
+
+
 def daemon_loop():
-    """主循环: 保持串口连接 + 消费队列"""
+    """主循环: 保持串口连接 + 消费队列 + 每秒刷新健康数据"""
     import serial
 
     os.makedirs(QUEUE_DIR, exist_ok=True)
@@ -104,7 +116,17 @@ def daemon_loop():
         print(f"❌ Cannot open {PORT}: {e}")
         sys.exit(1)
 
+    last_health = 0
+
     while True:
+        now = time.time()
+
+        # 每秒更新健康数据
+        if now - last_health >= 1.0:
+            cpu, mem = get_health()
+            send_cmd(ser, {"cmd": "health", "cpu": cpu, "mem": mem})
+            last_health = now
+
         # 扫描 FIFO 队列
         for entry in sorted(glob.glob(os.path.join(QUEUE_DIR, "cmd_*"))):
             try:
@@ -215,6 +237,10 @@ def main():
         stop_daemon()
     elif action == "status":
         cmd_status()
+    elif action == "restart":
+        stop_daemon()
+        time.sleep(0.5)
+        start_daemon()
     elif action == "send":
         cmd_str = " ".join(sys.argv[2:])
         if cmd_str:

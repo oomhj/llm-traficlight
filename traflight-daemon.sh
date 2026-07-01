@@ -6,13 +6,8 @@ DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PYDAEMON="$DIR/traflight-daemon.py"
 
 case "$1" in
-    start|stop|status)
+    start|stop|restart|status)
         python3 "$PYDAEMON" "$1"
-        ;;
-    restart)
-        python3 "$PYDAEMON" stop 2>/dev/null
-        sleep 0.5
-        python3 "$PYDAEMON" start
         ;;
     before)    python3 "$PYDAEMON" send "yellow" ;;
     success)   python3 "$PYDAEMON" send "green" ;;
