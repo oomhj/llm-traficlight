@@ -84,7 +84,7 @@ case "$1" in
     success)   send_cmd "green" ;;
     failure)   send_cmd "blink red -n 3" ;;
     notify|red) send_cmd "red" ;;
-    health)    python3 "$DIR/traflight-health.py" --light ;;
+    health)    python3 "$DIR/traflight-health.py" --light ;;   # 只更新 CPU/MEM 条，不碰红绿灯
     healthd)
         # 后台持续监控, 每 5 秒检查一次系统健康
         nohup python3 "$DIR/traflight-health.py" --watch > /dev/null 2>&1 &
