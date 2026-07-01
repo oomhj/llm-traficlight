@@ -80,11 +80,25 @@ case "$1" in
             echo "stopped"
         fi
         ;;
-    before)   send_cmd "yellow" ;;
-    success)  send_cmd "green" ;;
-    failure)  send_cmd "blink red -n 3" ;;
+    before)    send_cmd "yellow" ;;
+    success)   send_cmd "green" ;;
+    failure)   send_cmd "blink red -n 3" ;;
     notify|red) send_cmd "red" ;;
+    health)    python3 "$DIR/traflight-health.py" --light ;;
+    healthd)
+        # 后台持续监控, 每 5 秒检查一次系统健康
+        nohup python3 "$DIR/traflight-health.py" --watch > /dev/null 2>&1 &
+        echo $! > /tmp/traflight-healthd.pid
+        echo "healthd started (pid $(cat /tmp/traflight-healthd.pid))"
+        ;;
+    health-stop)
+        if [ -f /tmp/traflight-healthd.pid ]; then
+            kill $(cat /tmp/traflight-healthd.pid) 2>/dev/null
+            rm -f /tmp/traflight-healthd.pid
+            echo "healthd stopped"
+        fi
+        ;;
     *)
-        echo "Usage: $0 {start|stop|restart|status|before|success|failure|notify}"
+        echo "Usage: $0 {start|stop|restart|status|before|success|failure|notify|health|healthd|health-stop}"
         ;;
 esac
