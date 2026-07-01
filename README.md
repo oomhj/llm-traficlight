@@ -3,6 +3,7 @@
 让 AI Agent (Claude 等) 通过 **USB 串口**控制 ST7735 TFT 屏幕上的红绿灯。
 
 > 🔌 **无需 WiFi！** 只需一根 USB 线连接电脑，Agent 通过串口发送 JSON 命令即可控制。
+> 🤖 **自动 Hooks!** 命令执行时自动亮黄灯→绿灯，失败时自动闪烁红灯。
 
 ## 通信方式
 
@@ -15,14 +16,21 @@
 │  ← 接收 JSON 行   │ ←──────────  │  │  🔴 🟡 🟢   │ │
 └─────────────────┘              │  └──────────────┘ │
                                   └──────────────────┘
+        │
+        │ Auto Hooks (Claude Code):
+        │ PreToolUse → 🟡 yellow
+        │ PostToolUse → 🟢 green
+        │ PostToolUseFailure → 🔴 blink red
+        │ (通过守护进程 FIFO 队列避免串口竞争)
 ```
 
-**工作原理：**
-1. 电脑通过 USB 线连接 ESP8266（即烧录用的那根线）
-2. Agent 打开对应的串口（如 `/dev/ttyUSB0` 或 `COM3`）
-3. 发送一行 JSON 命令，以 `\n` 结尾
-4. ESP8266 执行命令并在 TFT 上绘制红绿灯
-5. 返回一行 JSON 响应
+## 自动 Hook 安装
+
+```bash
+python3 scripts/install-hooks.py
+```
+
+安装后每次 Bash 命令执行时自动触发红绿灯，无需手动调用。
 
 ## 硬件清单
 
@@ -289,14 +297,25 @@ Agent:
 
 ```
 llm-traficlight/
-├── platformio.ini                    # PlatformIO 编译配置
-├── User_Setup_ST7735.h               # TFT 屏幕引脚配置
-├── requirements.txt                  # Python 依赖
-├── traflight.py                      # 🔧 Agent CLI 桥接层 (推荐方式)
+├── traflight.py                      # Python CLI 桥接层
+├── traflight-daemon.sh               # 串口守护进程 (FIFO 队列, 防并发竞争)
+├── traflight-hook.sh                 # Claude Code hook 脚本
+├── scripts/
+│   ├── install-hooks.py              # Hook 安装脚本
+│   └── stress_test.py                # 压测脚本
 ├── src/
 │   └── main.cpp                      # ESP8266 固件 (串口协议 + TFT 显示)
 ├── docs/
-│   └── DESIGN.md                     # 完整方案设计文档
+│   ├── DESIGN.md                     # 方案设计文档
+│   └── FIRMWARE_REVIEW.md            # 固件执行流分析
+├── .claude/
+│   ├── settings.local.json           # 项目权限配置
+│   └── skills/traffic-light.md       # Skill 定义
+├── User_Setup_ST7735.h               # TFT 屏幕引脚配置
+├── platformio.ini                    # PlatformIO 编译配置
+├── setup.py                          # Python 包安装
+├── requirements.txt                  # Python 依赖
+├── CLAUDE.md                         # 项目规则
 └── README.md
 ```
 

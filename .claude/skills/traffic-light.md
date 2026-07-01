@@ -4,90 +4,83 @@ description: >
   Physical agent status indicator — ESP8266 ST7735 TFT traffic light
   connected via USB serial. SIGNAL when working / done / need user input.
 
-  ⚠️ MANDATORY: This skill MUST be invoked on every task. See CLAUDE.md.
+  ⚠️ MANDATORY: Must be used on every task. See CLAUDE.md.
 ---
 
 # 🚦 Traffic Light — Agent Status Indicator
 
-## ⚠️ 硬性要求
+## 硬性要求
 
-在**每次**执行任何任务时，都**必须**按以下顺序调用红绿灯：
+每次执行任务**必须**按顺序调用红绿灯：
 
 ```
-1. 开始任务 → 🟡 黄灯    (traflight yellow)
-2. 完成任务 → 🟢 绿灯    (traflight green)
-3. 需要输入 → 🔴 红灯    (traflight red)
+开始 → 🟡 黄灯  (PreToolUse auto)
+完成 → 🟢 绿灯  (PostToolUse auto)
+失败 → 🔴 闪烁  (PostToolUseFailure auto)
+需要输入 → 🔴 红灯  (manual)
 ```
-
-这是本项目的核心约定，不是建议。如果忘记调用，用户会指出来。
-
-## Convention
-
-| State | Light | When |
-|-------|-------|------|
-| **Working** | 🟡 **Yellow** | Executing a task, processing, waiting for command |
-| **Done** | 🟢 **Green** | Task completed successfully |
-| **Need Input** | 🔴 **Red** | Waiting for user confirmation, blocked |
-| **Error / Alert** | 🔴 **Blink Red** | Something went wrong |
 
 ## Quick Reference
 
 ```bash
-# ——— Agent Status (必须使用) ———
-traflight yellow          # 🟡 开始工作
-traflight green           # 🟢 完成
-traflight red             # 🔴 需要输入
-traflight blink red -n 5  # ⚠️ 告警
+# 状态指示
+traflight yellow       # 🟡 工作中
+traflight green        # 🟢 完成
+traflight red          # 🔴 需要输入
 
-# ——— 未安装 pip 时用 python3 ———
-python3 traflight.py yellow
-python3 traflight.py green
-python3 traflight.py red
-
-# ——— 查询 ———
-traflight status
-traflight scan
+# 手动控制
+traflight blink red -n 3   # 闪烁
+traflight status           # 查询
+traflight scan             # 扫串口
+traflight --port /dev/cu.usbserial-210 <cmd>
 ```
 
-## Usage Examples
+## Auto Hooks
+
+命令执行时自动触发，通过守护进程（`traflight-daemon.sh`）处理串口并发：
 
 ```
-User: 编译固件
-→ 亮黄灯 traflight yellow
-→ pio run --target upload
-→ 亮绿灯 traflight green
-→ "编译完成！"
-
-User: 这个参数怎么配？
-→ 亮红灯 traflight red
-→ 解释配置选项
-→ "你要用哪个？"
+命令 → PreToolUse → 写队列 "yellow" ─┐
+                                     ├──→ daemon 顺序处理
+     → PostToolUse → 写队列 "green" ─┘     yellow → green → ESP
 ```
+
+安装: `python3 scripts/install-hooks.py`
 
 ## State Machine
 
 ```
 Idle ──→ 🟡 Working ──→ 🟢 Done ──→ Idle
                │
-               ├──→ 🔴 Waiting for user ──→ 🟢 Done
+               ├──→ 🔴 Waiting ──→ 🟢 Done
                │
-               └──→ 🔴 Blink(alert) ──→ 🟢 Done
+               └──→ 🔴 Blink ──→ 🟢 Done
 ```
 
 ## Protocol
 
 USB serial 115200 8N1, JSON line protocol.
 
+## Files
+
+```
+traflight.py              → Python CLI
+traflight-daemon.sh       → 串口守护进程 (FIFO 队列)
+traflight-hook.sh         → Hook 脚本
+scripts/install-hooks.py  → Hook 安装
+src/main.cpp              → ESP8266 固件
+```
+
 ## Hardware
 
-- **MCU:** ESP8266 NodeMCU, USB serial (CP2102)
-- **Display:** ST7735 128x128 TFT, black background, BGR
+- **MCU:** ESP8266 NodeMCU
+- **Display:** ST7735 128x128 TFT, black bg, BGR
 - **Port:** typically `/dev/cu.usbserial-210`
 
 ## Troubleshooting
 
 | Problem | Fix |
-|---------|-----|
+|---------|------|
 | Port not found | `traflight scan` |
 | Permission denied | `sudo chmod 666 /dev/cu.usbserial-*` |
-| Already in use | Close serial monitor / Arduino IDE |
+| Already in use | `bash traflight-daemon.sh stop` |

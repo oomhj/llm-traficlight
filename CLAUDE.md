@@ -1,62 +1,64 @@
 # LLM Traffic Light
 
-> ⚠️ **MANDATORY**: Whenever you execute any task in this project, you MUST use the traffic light to signal your state. This is not optional.
+物理红绿灯 — Agent 状态指示器。
 
-## State Convention (必须遵守)
+> ⚠️ **MANDATORY**: 每次执行任务必须用红绿灯指示状态。
 
-| 状态 | 灯光 | 时机 | 示例命令 |
-|------|------|------|---------|
-| 🟡 **Working** | **先亮黄灯** | 开始执行任何任务前 | `python3 traflight.py yellow` |
-| 🟢 **Done** | **完成后亮绿灯** | 任务成功结束 | `python3 traflight.py green` |
-| 🔴 **Need Input** | **需要输入时亮红灯** | 需要用户决策/确认 | `python3 traflight.py red` |
-| 🔴 **Blink Alert** | **闪烁红灯** | 出错或需要关注 | `python3 traflight.py blink red -n 5` |
+## 状态约定
 
-## Workflow
+| 灯色 | 含义 | 触发 | 时机 |
+|------|------|------|------|
+| 🟡 **黄灯** | Working | Auto hook (PreToolUse) | 执行任何 Bash 命令前 |
+| 🟢 **绿灯** | Done | Auto hook (PostToolUse) | 命令成功完成后 |
+| 🔴 **红灯** | Need Input | 手动 `traflight red` | 需要用户决策时 |
+| 🔴 **闪红** | Error | Auto hook (PostToolUseFailure) | 命令执行失败时 |
 
-```
-1. 收到任务 → 立即亮黄灯:  traflight yellow
-2. 执行任务 → (pio run, 搜索代码, 修改文件...)
-3. 需要用户确认? → 亮红灯:  traflight red
-4. 完成后 → 亮绿灯:        traflight green
-```
-
-## Commands
+## 快速命令
 
 ```bash
-# 如果已安装: pip install -e .
-traflight yellow
-traflight green
-traflight red
+# 如果已安装
+traflight yellow     # 🟡 工作中
+traflight green      # 🟢 完成
+traflight red        # 🔴 需要输入
+traflight status     # 查询状态
+traflight scan       # 扫描串口
 
-# 如果未安装:
+# 未安装 pip 时
 python3 traflight.py yellow
-python3 traflight.py green
-python3 traflight.py red
-python3 traflight.py blink red -n 3
 python3 traflight.py status
-python3 traflight.py scan
-
-# 指定串口:
-python3 traflight.py --port /dev/cu.usbserial-210 <cmd>
 ```
 
-## Install
+## 自动 Hooks
 
-```bash
-pip install pyserial
-pip install -e .          # optional: enables `traflight` command
+命令执行时自动触发（通过守护进程避免串口竞争）：
+
+```
+Bash 命令 → PreToolUse → daemon → 🟡 yellow
+         → 命令执行
+         → PostToolUse → daemon → 🟢 green
+         → (失败) PostToolUseFailure → daemon → 🔴 blink red
 ```
 
-## Build & Flash
+安装: `python3 scripts/install-hooks.py`
+
+守护进程: 自动启停，无需手动管理
+
+## 项目文件
+
+```
+traflight.py              → Python CLI 桥接层
+traflight-hook.sh         → Claude Code hook 脚本
+traflight-daemon.sh       → 串口守护进程 (解决并发竞争)
+scripts/install-hooks.py  → hook 安装脚本
+src/main.cpp              → ESP8266 固件
+.claude/skills/traffic-light.md → Skill 完整文档
+docs/DESIGN.md            → 方案设计文档
+docs/FIRMWARE_REVIEW.md   → 固件执行流分析
+scripts/stress_test.py    → 压测脚本
+```
+
+## 编译烧录
 
 ```bash
 pio run --target upload
-```
-
-## Files
-
-```
-traflight.py              → CLI tool
-src/main.cpp              → ESP8266 firmware
-.claude/skills/traffic-light.md → Full skill docs
 ```
