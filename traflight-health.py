@@ -77,11 +77,12 @@ def evaluate(data):
 
 
 def update_bars(cpu=0, mem=0):
-    """只更新 CPU/MEM 条形图，不影响红绿灯状态"""
+    """更新 CPU/MEM 条形图（通过 daemon 队列，避免串口竞争）"""
     script_dir = os.path.dirname(os.path.abspath(__file__))
-    traflight = os.path.join(script_dir, "traflight.py")
-    port = "/dev/cu.usbserial-210"
-    os.system(f"python3 {traflight} --port {port} health --cpu {cpu} --mem {mem} >/dev/null 2>&1")
+    daemon = os.path.join(script_dir, "traflight-daemon.sh")
+    os.system(f"bash \"{daemon}\" start >/dev/null 2>&1")
+    os.system(f"bash \"{daemon}\" send_raw \"health --cpu {cpu} --mem {mem}\" >/dev/null 2>&1")
+
 
 
 def main():

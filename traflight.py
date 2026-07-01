@@ -131,6 +131,10 @@ class TrafficLight:
         if not self.ser:
             self.connect()
 
+        # 清空缓冲区中的旧数据，避免前一个 hook 的残留响应干扰
+        self.ser.reset_input_buffer()
+        time.sleep(0.1)  # 等待残留数据到达
+
         line = json.dumps(cmd_dict) + "\n"
         if not quiet:
             print(f"→ {line.strip()}")
