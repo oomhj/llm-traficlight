@@ -76,13 +76,15 @@ def evaluate(data):
     return "green"
 
 
-def set_light(color):
-    """调用 traflight.py 设置灯色"""
+def set_light(color, cpu=0, mem=0):
+    """发送健康数据并设置灯色"""
     script_dir = os.path.dirname(os.path.abspath(__file__))
     traflight = os.path.join(script_dir, "traflight.py")
     port = "/dev/cu.usbserial-210"
-    cmd = f"python3 {traflight} --port {port} {color}"
-    os.system(f"{cmd} >/dev/null 2>&1")
+    # 先更新 CPU/MEM 条
+    os.system(f"python3 {traflight} --port {port} health --cpu {cpu} --mem {mem} >/dev/null 2>&1")
+    # 再设置灯色
+    os.system(f"python3 {traflight} --port {port} {color} >/dev/null 2>&1")
 
 
 def main():
@@ -90,9 +92,9 @@ def main():
     color = evaluate(data)
     data["health"] = color
 
-    # 是否设置了灯
+    # 是否设置了灯 (同时更新 CPU/MEM 条)
     if "--light" in sys.argv or "--watch" in sys.argv:
-        set_light(color)
+        set_light(color, data["cpu_percent"], data["mem_percent"])
 
     # 打印 JSON
     print(json.dumps(data, indent=2))
@@ -106,7 +108,7 @@ def main():
                 data = collect()
                 color = evaluate(data)
                 data["health"] = color
-                set_light(color)
+                set_light(color, data["cpu_percent"], data["mem_percent"])
                 print(json.dumps(data, indent=2))
                 print()
         except KeyboardInterrupt:

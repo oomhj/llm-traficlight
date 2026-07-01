@@ -279,6 +279,10 @@ def main():
 
     p_cycle = sub.add_parser("cycle", help="标准红绿灯周期 (绿→黄→红)")
 
+    p_health = sub.add_parser("health", help="更新 CPU/MEM 显示条")
+    p_health.add_argument("--cpu", type=int, default=0, help="CPU 使用率 0-100")
+    p_health.add_argument("--mem", type=int, default=0, help="内存使用率 0-100")
+
     p_port = sub.add_parser("port", help="显示当前串口设备")
     p_scan = sub.add_parser("scan", help="扫描可用串口")
     p_help = sub.add_parser("help", help="显示帮助")
@@ -332,6 +336,10 @@ def main():
                 cmd_pattern(tfl, args.steps)
             elif args.command == "cycle":
                 cmd_cycle(tfl)
+            elif args.command == "health":
+                resp = tfl.send_cmd({"cmd": "health", "cpu": args.cpu, "mem": args.mem})
+                if resp.get("status") != "ok":
+                    sys.exit(1)
             elif args.command == "status":
                 cmd_status(tfl)
     except KeyboardInterrupt:
