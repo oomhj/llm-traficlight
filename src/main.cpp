@@ -516,8 +516,8 @@ void setup() {
     Serial.println("Startup: blink all ×5");
     delay(500);
 
-    // 三灯齐闪 5 遍
-    blinkAll(5);
+    // 三灯齐闪 3 遍
+    blinkAll(3);
 
     // 最终回到熄灭状态
     drawTrafficLight("off");
