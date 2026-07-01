@@ -131,16 +131,6 @@ void drawTrafficLight(const String& color) {
 
 // ======================== 启动动画 ========================
 
-/** 走马灯: 红→黄→绿→灭 循环指定次数 */
-void startupMarquee(int cycles) {
-    for (int c = 0; c < cycles; c++) {
-        drawTrafficLight("red");    delay(100);
-        drawTrafficLight("yellow"); delay(100);
-        drawTrafficLight("green");  delay(100);
-        drawTrafficLight("off");    delay(100);
-    }
-}
-
 /** 三灯齐闪: 红黄绿同时亮灭 */
 void blinkAll(int times) {
     for (int t = 0; t < times; t++) {
@@ -523,11 +513,9 @@ void setup() {
     tft.print("Serial Mode");
     tft.setTextColor(0xFFFF, COL_BG);
 
-    Serial.println("Startup animation: marquee ×10 + blinkAll ×5");
+    Serial.println("Startup: blink all ×5");
     delay(500);
 
-    // 走马灯 10 遍
-    startupMarquee(10);
     // 三灯齐闪 5 遍
     blinkAll(5);
 
