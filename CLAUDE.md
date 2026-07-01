@@ -57,6 +57,14 @@ traflight scan       # 扫串口
 python3 traflight.py yellow
 ```
 
+## 系统健康监控
+
+```bash
+bash traflight-daemon.sh health      # 更新 CPU/MEM 显示条
+bash traflight-daemon.sh healthd     # 后台持续监控 (每5秒)
+bash traflight-daemon.sh health-stop # 停止后台监控
+```
+
 ## 编译烧录
 
 ```bash
