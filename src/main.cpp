@@ -342,7 +342,6 @@ void processCommand(const String& line) {
             int times = cmd["times"] | 3;
             int interval = cmd["interval"] | 500;
             patternActive = false;
-            blinkingActive = true;
             blinkColor = v;
             blinkRemaining = times * 2;
             blinkOnTime = interval;
@@ -351,6 +350,7 @@ void processCommand(const String& line) {
             lastBlinkToggle = 0;
             setLight("off");
             currentLight = "off";
+            blinkingActive = true;  // 先关灯再设标志，避免 setLight 被跳过
             sendLog("blink " + v + " x" + String(times) + " @" + String(interval) + "ms");
             JsonDocument res;
             res["status"] = "ok";
@@ -375,11 +375,11 @@ void processCommand(const String& line) {
             blinkingActive = false;
             patternSteps.clear();
             patternSteps["steps"] = steps;
-            patternActive = true;
             patternIndex = 0;
             patternStepStartTime = 0;
             setLight("off");
             currentLight = "off";
+            patternActive = true;  // 先关灯再设标志
             sendLog("pattern " + String(steps.size()) + " steps");
             JsonDocument res;
             res["status"] = "ok";
