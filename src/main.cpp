@@ -129,6 +129,36 @@ void drawTrafficLight(const String& color) {
     }
 }
 
+// ======================== 启动动画 ========================
+
+/** 走马灯: 红→黄→绿→灭 循环指定次数 */
+void startupMarquee(int cycles) {
+    for (int c = 0; c < cycles; c++) {
+        drawTrafficLight("red");    delay(100);
+        drawTrafficLight("yellow"); delay(100);
+        drawTrafficLight("green");  delay(100);
+        drawTrafficLight("off");    delay(100);
+    }
+}
+
+/** 三灯齐闪: 红黄绿同时亮灭 */
+void blinkAll(int times) {
+    for (int t = 0; t < times; t++) {
+        // 全亮
+        drawHousing();
+        drawLightOff(LIGHT_CX, LIGHT_R1_Y, LIGHT_R);
+        drawLightOff(LIGHT_CX, LIGHT_R2_Y, LIGHT_R);
+        drawLightOff(LIGHT_CX, LIGHT_R3_Y, LIGHT_R);
+        drawLightOn(LIGHT_CX, LIGHT_R1_Y, LIGHT_R, COL_RED, COL_RED_GLOW);
+        drawLightOn(LIGHT_CX, LIGHT_R2_Y, LIGHT_R, COL_YELLOW, COL_Y_GLOW);
+        drawLightOn(LIGHT_CX, LIGHT_R3_Y, LIGHT_R, COL_GREEN, COL_G_GLOW);
+        delay(250);
+        // 全灭
+        drawTrafficLight("off");
+        delay(250);
+    }
+}
+
 // ======================== 灯光控制 (增量绘制) ========================
 // 不重绘整个屏幕，只切换变动的灯，每次 ~5ms 而非 ~100ms
 
@@ -493,15 +523,15 @@ void setup() {
     tft.print("Serial Mode");
     tft.setTextColor(0xFFFF, COL_BG);
 
-    Serial.println("Self-test: Red → Yellow → Green");
-    delay(1000);
+    Serial.println("Startup animation: marquee ×10 + blinkAll ×5");
+    delay(500);
 
-    drawTrafficLight("red");
-    delay(500);
-    drawTrafficLight("yellow");
-    delay(500);
-    drawTrafficLight("green");
-    delay(500);
+    // 走马灯 10 遍
+    startupMarquee(10);
+    // 三灯齐闪 5 遍
+    blinkAll(5);
+
+    // 最终回到熄灭状态
     drawTrafficLight("off");
 
     Serial.println("✅ Ready. Send a command (type 'help' for options):");
