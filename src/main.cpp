@@ -447,7 +447,7 @@ void processCommand(const String& line) {
     String t = line; t.trim(); t.toLowerCase();
     if (t == "red" || t == "yellow" || t == "green" || t == "off") {
         blinkingActive = false;
-            blinkAllActive = false; patternActive = false;
+        blinkAllActive = false; patternActive = false;
         setLight(t); sendLog("light → " + t); sendOk();
     } else if (t == "status") {
         sendStatus();
@@ -505,6 +505,7 @@ void updateBlinkAll() {
         } else {
             drawTrafficLight("off");
         }
+        currentLight = "off";  // reset: setLight 不再尝试熄灭旧灯
         // 恢复健康面板显示（drawHousing 清空了屏幕）
         drawHealthPanel(cpuPercent, memPercent);
         // blinkAll 持续闪烁直到被下一个命令停止
