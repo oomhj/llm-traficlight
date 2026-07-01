@@ -37,7 +37,7 @@
 #define TL_BODY_R      6
 
 #define TL_CY          28          // 灯中心 Y
-#define TL_R           20          // 灯半径 (最大)
+#define TL_R           18          // 灯半径
 #define TL_RED_X       22          // 红灯 X
 #define TL_YELLOW_X    64          // 黄灯 X
 #define TL_GREEN_X     106         // 绿灯 X
@@ -113,10 +113,10 @@ void drawLightOn(int cx, int cy, int r, uint16_t color, uint16_t glowColor) {
     tft.fillCircle(cx, cy, r + 2, glowColor);
     tft.fillCircle(cx, cy, r, color);
     tft.drawCircle(cx, cy, r, 0xFFFF);
-    // 高光 (适应 r=20)
-    tft.fillCircle(cx - 6, cy - 6, 6, COL_HIGHLIGHT);
-    tft.fillCircle(cx - 8, cy - 8, 4, COL_HIGHLIGHT);
-    tft.fillCircle(cx - 10, cy - 10, 2, COL_HIGHLIGHT);
+    // 高光
+    tft.fillCircle(cx - 5, cy - 5, 5, COL_HIGHLIGHT);
+    tft.fillCircle(cx - 7, cy - 7, 3, COL_HIGHLIGHT);
+    tft.fillCircle(cx - 8, cy - 8, 1, COL_HIGHLIGHT);
 }
 
 /** 横向红绿灯外壳 (加大) */
