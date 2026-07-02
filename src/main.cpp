@@ -578,7 +578,7 @@ void setup() {
     Serial.println();
 
     tft.init();
-    tft.setRotation(0);
+    tft.setRotation(2);
     tft.fillScreen(COL_BG);
     tft.setTextColor(0xFFFF, COL_BG);
     tft.setTextSize(1);
