@@ -1,15 +1,15 @@
 /**
  * LLM Traffic Light — ESP8266 串口红绿灯 Agent 接口
  * ==================================================
- * 供 AI Agent (Claude 等) 通过 USB 串口控制 ST7735 TFT 红绿灯
+ * 供 AI Agent (Claude 等) 通过 USB 串口控制 ST7789V TFT 红绿灯
  *
- * UI 布局 (128×128):
- *   ┌────────────────────────────────┐
- *   │     (🔴)   (🟡)   (🟢)        │ ← 加大横向红绿灯
- *   │────────────────────────────────│
- *   │  CPU ███████░░ 73%             │ ← 一行: 标题|10格|百分比
- *   │  MEM ██████░░░ 65%            │
- *   └────────────────────────────────┘
+ * UI 布局 (240×240):
+ *   ┌──────────────────────────────────────┐
+ *   │       (🔴)     (🟡)     (🟢)         │ ← 加大横向红绿灯
+ *   │──────────────────────────────────────│
+ *   │  CPU   ████████░░  73%             │ ← 一行: 标题|20格|百分比
+ *   │  MEM   ██████░░░░  65%             │
+ *   └──────────────────────────────────────┘
  *
  * 串口协议 (115200 baud, 8N1):
  *   {"cmd":"light", "value":"red"}        设置灯光
@@ -27,30 +27,30 @@
 #define SERIAL_BAUD   115200
 #define RX_BUFFER     1024
 
-// ======================== UI 布局 (128×128) ========================
+// ======================== UI 布局 (240×240) ========================
 
-// 横向红绿灯 (撑满 128，灯最大 r=20)
+// 横向红绿灯 (撑满 240，灯最大 r=34)
 #define TL_BODY_X      0
-#define TL_BODY_Y      4
-#define TL_BODY_W      128
-#define TL_BODY_H      48
-#define TL_BODY_R      6
+#define TL_BODY_Y      8
+#define TL_BODY_W      240
+#define TL_BODY_H      90
+#define TL_BODY_R      11
 
-#define TL_CY          28          // 灯中心 Y
-#define TL_R           18          // 灯半径
-#define TL_RED_X       22          // 红灯 X
-#define TL_YELLOW_X    64          // 黄灯 X
-#define TL_GREEN_X     106         // 绿灯 X
+#define TL_CY          52          // 灯中心 Y
+#define TL_R           34          // 灯半径
+#define TL_RED_X       42          // 红灯 X
+#define TL_YELLOW_X    120         // 黄灯 X
+#define TL_GREEN_X     198         // 绿灯 X
 
 // CPU / MEM 一行布局: 标题 | 20格条形图 | 百分比
-#define ROW1_Y         58          // CPU 行 Y
-#define ROW2_Y         68          // MEM 行 Y
-#define ROW_LABEL_X    2           // "CPU"/"MEM" 标题 X
-#define ROW_BAR_X      21          // 条形图起始 X
-#define ROW_BAR_W      3           // 每格宽度
-#define ROW_BAR_H      7           // 每格高度
-#define ROW_BAR_GAP    1           // 格间距
-#define ROW_VALUE_X    102         // 百分比数值 X
+#define ROW1_Y         108         // CPU 行 Y
+#define ROW2_Y         138         // MEM 行 Y
+#define ROW_LABEL_X    4           // "CPU"/"MEM" 标题 X
+#define ROW_BAR_X      48          // 条形图起始 X
+#define ROW_BAR_W      5           // 每格宽度
+#define ROW_BAR_H      16          // 每格高度
+#define ROW_BAR_GAP    2           // 格间距
+#define ROW_VALUE_X    188         // 百分比数值 X
 #define BAR_COUNT      20          // 格子数 (每格 5%)
 
 // 颜色
@@ -109,17 +109,17 @@ unsigned long patternDrift = 0;
 void drawLightOff(int cx, int cy, int r) {
     tft.fillCircle(cx, cy, r, COL_DARK);
     tft.drawCircle(cx, cy, r, COL_LIGHT_EDGE);
-    tft.fillCircle(cx, cy, r - 4, COL_LIGHT_INNER);
+    tft.fillCircle(cx, cy, r - 8, COL_LIGHT_INNER);
 }
 
 void drawLightOn(int cx, int cy, int r, uint16_t color, uint16_t glowColor) {
-    tft.fillCircle(cx, cy, r + 2, glowColor);
+    tft.fillCircle(cx, cy, r + 4, glowColor);
     tft.fillCircle(cx, cy, r, color);
     tft.drawCircle(cx, cy, r, 0xFFFF);
     // 高光
-    tft.fillCircle(cx - 5, cy - 5, 5, COL_HIGHLIGHT);
-    tft.fillCircle(cx - 7, cy - 7, 3, COL_HIGHLIGHT);
-    tft.fillCircle(cx - 8, cy - 8, 1, COL_HIGHLIGHT);
+    tft.fillCircle(cx - 9, cy - 9, 9, COL_HIGHLIGHT);
+    tft.fillCircle(cx - 13, cy - 13, 6, COL_HIGHLIGHT);
+    tft.fillCircle(cx - 15, cy - 15, 2, COL_HIGHLIGHT);
 }
 
 /** 横向红绿灯外壳 (加大) */
@@ -152,9 +152,18 @@ uint16_t loadColor(int value) {
     return 0xF800;                     // 红色
 }
 
+/** 将 RGB565 颜色调暗约 75% (用于条形图空心轮廓) */
+uint16_t dimColor(uint16_t c) {
+    uint16_t r = ((c >> 11) & 0x1F) * 3 / 10;
+    uint16_t g = ((c >> 5) & 0x3F) * 3 / 10;
+    uint16_t b = (c & 0x1F) * 3 / 10;
+    return (r << 11) | (g << 5) | b;
+}
+
 /** 绘制 20 格条形图 (每格 5%，整体颜色随负载变化) */
 void drawBars(int y, int value) {
     uint16_t color = loadColor(value);
+    uint16_t hollowColor = dimColor(color);  // 空心部分更暗
     int perBar = 100 / BAR_COUNT;
     for (int i = 0; i < BAR_COUNT; i++) {
         int bx = ROW_BAR_X + i * (ROW_BAR_W + ROW_BAR_GAP);
@@ -164,16 +173,16 @@ void drawBars(int y, int value) {
         } else if (value > i * perBar) {
             int partial = (value % perBar) * ROW_BAR_W / perBar;
             if (partial > 0) tft.fillRect(bx, y, partial, ROW_BAR_H, color);
-            tft.drawRect(bx, y, ROW_BAR_W, ROW_BAR_H, color);
+            tft.drawRect(bx, y, ROW_BAR_W, ROW_BAR_H, hollowColor);
         } else {
-            tft.drawRect(bx, y, ROW_BAR_W, ROW_BAR_H, color);
+            tft.drawRect(bx, y, ROW_BAR_W, ROW_BAR_H, hollowColor);
         }
     }
 }
 
 /** 更新健康面板 — 一行一条: 标题 | 20格条 | 百分比 */
 void drawHealthPanel(int cpu, int mem) {
-    tft.setTextSize(1);
+    tft.setTextSize(2);
 
     // ── CPU 行 ──
     tft.setCursor(ROW_LABEL_X, ROW1_Y);
@@ -181,7 +190,7 @@ void drawHealthPanel(int cpu, int mem) {
     tft.print("CPU");
 
     // 先清空上一轮的条形区
-    tft.fillRect(ROW_BAR_X, ROW1_Y, 128 - ROW_BAR_X, ROW_BAR_H, COL_BG);
+    tft.fillRect(ROW_BAR_X, ROW1_Y, 240 - ROW_BAR_X, ROW_BAR_H, COL_BG);
     drawBars(ROW1_Y, cpu);
 
     tft.setCursor(ROW_VALUE_X, ROW1_Y);
@@ -194,7 +203,7 @@ void drawHealthPanel(int cpu, int mem) {
     tft.setTextColor(COL_LABEL, COL_BG);
     tft.print("MEM");
 
-    tft.fillRect(ROW_BAR_X, ROW2_Y, 128 - ROW_BAR_X, ROW_BAR_H, COL_BG);
+    tft.fillRect(ROW_BAR_X, ROW2_Y, 240 - ROW_BAR_X, ROW_BAR_H, COL_BG);
     drawBars(ROW2_Y, mem);
 
     tft.setCursor(ROW_VALUE_X, ROW2_Y);
@@ -224,7 +233,7 @@ bool setLight(const String& color) {
 
     int prevX = lightX(currentLight);
     if (prevX > 0) {
-        tft.fillCircle(prevX, TL_CY, TL_R + 3, COL_BODY);
+        tft.fillCircle(prevX, TL_CY, TL_R + 6, COL_BODY);
         drawLightOff(prevX, TL_CY, TL_R);
     }
 
@@ -244,7 +253,7 @@ void setBlinkLight(const String& color, bool on) {
             color == "red" ? COL_RED : (color == "yellow" ? COL_YELLOW : COL_GREEN),
             color == "red" ? COL_RED_GLOW : (color == "yellow" ? COL_Y_GLOW : COL_G_GLOW));
     } else {
-        tft.fillCircle(x, TL_CY, TL_R + 2, COL_BODY);
+        tft.fillCircle(x, TL_CY, TL_R + 4, COL_BODY);
         drawLightOff(x, TL_CY, TL_R);
     }
 }
@@ -261,7 +270,7 @@ void blinkAll(int times) {
         drawLightOn(TL_YELLOW_X, TL_CY, TL_R, COL_YELLOW, COL_Y_GLOW);
         drawLightOn(TL_GREEN_X, TL_CY, TL_R, COL_GREEN, COL_G_GLOW);
         delay(250);
-        setLight("off");
+        drawTrafficLight("off");
         delay(250);
     }
 }
@@ -270,7 +279,6 @@ void blinkAll(int times) {
 
 void sendResponse(const String& json) {
     Serial.flush();
-    delay(1);
     Serial.println(json);
     Serial.flush();
 }
@@ -332,7 +340,10 @@ void processCommand(const String& line) {
             blinkingActive = false;
             blinkAllActive = false;
             patternActive = false;
-            setLight(v);
+            // drawTrafficLight 而非 setLight: blink_all 残留多灯时 currentLight=="off"
+            // setLight 的 old-light 清除逻辑 (lightX) 会跳过, 导致旧灯不灭新灯亮 → 多灯同时亮
+            drawTrafficLight(v);
+            currentLight = v;
             sendLog("light → " + v);
             sendOk();
 
@@ -347,13 +358,16 @@ void processCommand(const String& line) {
             int times = cmd["times"] | 3;
             int interval = cmd["interval"] | 500;
             patternActive = false;
+            blinkAllActive = false;  // ⚠️ 必须清除 blinkAll, 否则 setLight 被 guard 阻塞
             blinkColor = v;
             blinkRemaining = times * 2;
             blinkOnTime = interval;
             blinkOffTime = interval;
             blinkState = false;
             lastBlinkToggle = 0;
-            setLight("off");
+            // ⚠️ 用 drawTrafficLight 而非 setLight: blink_all 可能残留多灯且
+            //    currentLight=="off", setLight 的 lightX 跳过清除
+            drawTrafficLight("off");
             currentLight = "off";
             blinkingActive = true;  // 先关灯再设标志，避免 setLight 被跳过
             sendLog("blink " + v + " x" + String(times) + " @" + String(interval) + "ms");
@@ -383,7 +397,8 @@ void processCommand(const String& line) {
             patternSteps["steps"] = steps;
             patternIndex = 0;
             patternStepStartTime = 0;
-            setLight("off");
+            // ⚠️ 用 drawTrafficLight 而非 setLight: blink_all 残留多灯会跳过错失清除
+            drawTrafficLight("off");
             currentLight = "off";
             patternActive = true;  // 先关灯再设标志
             sendLog("pattern " + String(steps.size()) + " steps");
@@ -448,7 +463,7 @@ void processCommand(const String& line) {
     if (t == "red" || t == "yellow" || t == "green" || t == "off") {
         blinkingActive = false;
         blinkAllActive = false; patternActive = false;
-        setLight(t); sendLog("light → " + t); sendOk();
+        drawTrafficLight(t); currentLight = t; sendLog("light → " + t); sendOk();
     } else if (t == "status") {
         sendStatus();
     } else if (t == "help") {
@@ -523,8 +538,9 @@ void updateBlink() {
         setBlinkLight(blinkColor, blinkState);
         if (blinkRemaining <= 0) {
             blinkingActive = false;
-            blinkAllActive = false;
-            setLight("off");
+            // blink 启动时已清过 blinkAllActive, 此处无需重复清除
+            // ⚠️ 用 drawTrafficLight 而非 setLight: 确保清除所有可能残留的灯
+            drawTrafficLight("off");
             currentLight = "off";
             Serial.println("[BLINK] Finished");
         }
@@ -578,10 +594,11 @@ void setup() {
     Serial.println();
 
     tft.init();
-    tft.setRotation(2);
-    tft.fillScreen(COL_BG);
-    tft.setTextColor(0xFFFF, COL_BG);
-    tft.setTextSize(1);
+    tft.setRotation(0);
+
+    // 背光控制 (GPIO5, LOW=亮)
+    pinMode(5, OUTPUT);
+    digitalWrite(5, LOW);
 
     // 启动动画
     drawFullUI("off", 0, 0);
