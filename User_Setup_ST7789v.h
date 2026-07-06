@@ -8,10 +8,13 @@
 //    SCK       | D5      | GPIO14
 //    SDA(MOSI) | D7      | GPIO13
 //    REST      | D4      | GPIO2
-//    LEDA      |         | GPIO5
+//    LEDA      |         | GPIO5 ← PW3401A P-CH MOSFET 高边驱动 (Gate)
 //    LEDK      | GND     | —
 //
-//   背光：GPIO5 LOW = 亮，HIGH = 灭
+//   背光驱动：GPIO5 → PW3401A (P-Channel MOSFET 高边开关) → 背光 LEDA
+//   GPIO5 LOW  → Vgs < Vth → MOSFET 导通 → 背光亮
+//   GPIO5 HIGH → Vgs ≈ 0 → MOSFET 截止 → 背光灭
+//   TFT_eSPI 中 TFT_BACKLIGHT_ON = LOW 匹配此逻辑
 // *************************************************************************************************
 
 #define USER_SETUP_LOADED  // 通知 TFT_eSPI 使用此文件，跳过库默认的 User_Setup.h

@@ -2,59 +2,53 @@
 
 物理红绿灯 — Agent 状态指示器。
 
-> ⚠️ **每次执行任务必须用红绿灯指示状态。**
+> ⚠️ **每次执行任务必须通过 traffic-light skill 控制红绿灯。**
 
 ## 状态约定
 
 | 灯色 | 含义 | 触发 | 时机 |
 |------|------|------|------|
-| 🟡 **黄灯** | Working | Auto hook (PreToolUse) | 执行任何 Bash 命令前 |
-| 🟢 **绿灯** | Done | Auto hook (PostToolUse) | 命令成功完成后 |
-| 🔴 **红灯** | Need Input | **手动 `traflight red`** | 需要用户决策时 |
-| 🔴 **闪红** | Error | Auto hook (PostToolUseFailure) | 命令执行失败时 |
-| 🔴 **红灯** | Notification | Auto hook (Notification) | 桌面通知时 |
+| 🟢 **绿灯** | 开始/完成 | Skill: `traflight green` | 开始任务或任务完成时 |
+| 🟡 **黄灯** | Working | Skill: `traflight yellow` | 正在执行操作时 |
+| 🔴 **红灯** | 等待输入 / 出错 | Skill: `traflight red` | 需要用户决策或遇到错误时 |
 
 ## 工作流
 
 ```
 收到任务:
-  traflight yellow    ← 🟡 开始工作
-  执行命令...            ← auto hooks 自动切换
-  traflight green     ← 🟢 完成
+  → traflight green     🟢 开始
 
-需要用户输入:
-  traflight red       ← 🔴 等用户决策
-  (解释问题，等回复)
+执行操作:
+  → traflight yellow    🟡 工作中
+
+需要用户决策:
+  → traflight red       🔴 等回复
+  → (用户回复后)
+  → traflight green     🟢 继续
 
 遇到错误:
-  auto → 🔴 闪烁      ← auto hook 自动触发
+  → traflight red       🔴 已记录
+
+任务完成:
+  → traflight green     🟢 结束
 ```
 
-## Auto Hooks
-
-命令执行时自动触发（通过守护进程 FIFO 队列避免串口竞争）：
+## Hook (仅保留通知和权限)
 
 ```
-PreToolUse[Bash]       → daemon → 🟡 yellow
-PostToolUse[Bash]      → daemon → 🟢 green
-PostToolUseFailure     → daemon → 🔴 blink red
-Notification           → daemon → 🔴 red
+Notification            → daemon → 🔴 red
+PermissionRequest[Bash] → daemon → 🔴 blink_all (弹窗等待)
+PermissionDenied[Bash]  → daemon → 🔴 red   (被拒绝)
 ```
-
-安装: `python3 scripts/install-hooks.py`
 
 ## 快速命令
 
 ```bash
-# 已安装 pip
-traflight yellow     # 🟡
-traflight green      # 🟢
-traflight red        # 🔴
-traflight status     # 查状态
-traflight scan       # 扫串口
-
-# 未安装
-python3 traflight.py yellow
+bash traflight-cli.sh yellow     # 🟡
+bash traflight-cli.sh green      # 🟢
+bash traflight-cli.sh red        # 🔴
+bash traflight-cli.sh status     # 查状态
+bash traflight-cli.sh scan       # 扫串口
 ```
 
 ## 系统健康监控

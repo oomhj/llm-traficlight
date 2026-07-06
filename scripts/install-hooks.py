@@ -18,29 +18,20 @@ HOOK_SCRIPT = os.path.abspath(os.path.join(
 ))
 
 HOOKS = {
-    "PreToolUse": [
+    "PermissionRequest": [
         {
             "matcher": "Bash(*)",
             "hooks": [
-                {"type": "command", "command": f"bash {HOOK_SCRIPT} before",
+                {"type": "command", "command": f"bash {HOOK_SCRIPT} permission",
                  "async": True, "timeout": 5}
             ],
         }
     ],
-    "PostToolUse": [
+    "PermissionDenied": [
         {
             "matcher": "Bash(*)",
             "hooks": [
-                {"type": "command", "command": f"bash {HOOK_SCRIPT} success",
-                 "async": True, "timeout": 5}
-            ],
-        }
-    ],
-    "PostToolUseFailure": [
-        {
-            "matcher": "Bash(*)",
-            "hooks": [
-                {"type": "command", "command": f"bash {HOOK_SCRIPT} failure",
+                {"type": "command", "command": f"bash {HOOK_SCRIPT} denied",
                  "async": True, "timeout": 5}
             ],
         }
@@ -51,6 +42,8 @@ PERMISSIONS = [
     f"Bash(bash {HOOK_SCRIPT} before)",
     f"Bash(bash {HOOK_SCRIPT} success)",
     f"Bash(bash {HOOK_SCRIPT} failure)",
+    f"Bash(bash {HOOK_SCRIPT} permission)",
+    f"Bash(bash {HOOK_SCRIPT} denied)",
 ]
 
 

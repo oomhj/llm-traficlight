@@ -30,7 +30,6 @@ PIDFILE = "/tmp/traflight-daemon.pid"
 
 def find_port():
     """自动发现串口设备"""
-    import glob
     patterns = ["/dev/ttyUSB*", "/dev/ttyACM*", "/dev/cu.usbserial*",
                 "/dev/cu.usbmodem*", "/dev/cu.wchusbserial*"]
     for p in patterns:
@@ -140,20 +139,28 @@ def daemon_loop():
 
     os.makedirs(QUEUE_DIR, exist_ok=True)
 
-    try:
-        ser = serial.Serial(PORT, BAUD, timeout=2)
-        ser.reset_input_buffer()
-    except serial.SerialException as e:
-        print(f"❌ Cannot open {PORT}: {e}")
-        sys.exit(1)
-
-    # 注册退出时关闭串口
     def cleanup(*a):
         try:
             ser.close()
         except Exception:
             pass
         sys.exit(0)
+
+    def open_serial():
+        """打开串口，失败时返回 None"""
+        try:
+            s = serial.Serial(PORT, BAUD, timeout=2)
+            s.reset_input_buffer()
+            return s
+        except serial.SerialException as e:
+            print(f"[DAEMON] ⚠️ Cannot open {PORT}: {e}", flush=True)
+            return None
+
+    ser = open_serial()
+    if ser is None:
+        sys.exit(1)
+
+    # 注册退出时关闭串口
     signal.signal(signal.SIGTERM, cleanup)
     signal.signal(signal.SIGINT, signal.SIG_IGN)
 
@@ -161,36 +168,54 @@ def daemon_loop():
     t = threading.Thread(target=health_collector, daemon=True)
     t.start()
 
+    reconnect_delay = 1  # 秒，指数退避
+
     while True:
-        now = time.time()
+        try:
+            # 消费健康线程的最新数据
+            global _health_cpu, _health_mem, _health_updated
+            if _health_updated:
+                with _health_lock:
+                    cpu = _health_cpu
+                    mem = _health_mem
+                    _health_updated = False
+                send_cmd(ser, {"cmd": "health", "cpu": cpu, "mem": mem})
 
-        # 消费健康线程的最新数据
-        global _health_cpu, _health_mem, _health_updated
-        if _health_updated:
-            with _health_lock:
-                cpu = _health_cpu
-                mem = _health_mem
-                _health_updated = False
-            send_cmd(ser, {"cmd": "health", "cpu": cpu, "mem": mem})
-
-        # 扫描 FIFO 队列
-        for entry in sorted(glob.glob(os.path.join(QUEUE_DIR, "cmd_*"))):
-            try:
-                with open(entry) as f:
-                    cmd_str = f.read().strip()
-                os.unlink(entry)
-
-                if cmd_str:
-                    cmd_dict = parse_cmd(cmd_str)
-                    if cmd_dict:
-                        send_cmd(ser, cmd_dict)
-            except Exception:
+            # 扫描 FIFO 队列
+            for entry in sorted(glob.glob(os.path.join(QUEUE_DIR, "cmd_*"))):
                 try:
+                    with open(entry) as f:
+                        cmd_str = f.read().strip()
                     os.unlink(entry)
-                except Exception:
-                    pass
 
-        time.sleep(0.05)
+                    if cmd_str:
+                        cmd_dict = parse_cmd(cmd_str)
+                        if cmd_dict:
+                            send_cmd(ser, cmd_dict)
+                except Exception:
+                    try:
+                        os.unlink(entry)
+                    except Exception:
+                        pass
+
+            # 串口正常，重置重连延迟
+            reconnect_delay = 1
+            time.sleep(0.05)
+
+        except serial.SerialException as e:
+            print(f"[DAEMON] ⚠️ Serial error: {e} (reconnecting in {reconnect_delay}s)", flush=True)
+            try:
+                ser.close()
+            except Exception:
+                pass
+            time.sleep(reconnect_delay)
+            ser = open_serial()
+            if ser is None:
+                # 继续重连，指数退避最长 30s
+                reconnect_delay = min(reconnect_delay * 2, 30)
+            else:
+                reconnect_delay = 1
+                print(f"[DAEMON] ✅ Serial reconnected to {PORT}", flush=True)
 
 
 def write_pid(pid):

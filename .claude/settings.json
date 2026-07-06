@@ -1,0 +1,8 @@
+{
+  "skills": {
+    "traffic-light": {
+      "name": "traffic-light",
+      "description": "控制物理红绿灯指示器 — skill 调用方式: bash traflight-cli.sh yellow|green|red|status"
+    }
+  }
+}
